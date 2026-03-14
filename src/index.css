@@ -1,0 +1,221 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Primary Emerald Palette */
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 100%;
+    --primary-dark: 161 79% 37%;
+    --primary-light: 158 64% 52%;
+    
+    /* Background & Surfaces */
+    --background: 210 20% 98%;
+    --foreground: 220 14% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 14% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 14% 10%;
+    
+    /* Secondary Colors */
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 220 14% 10%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    
+    /* Semantic Colors */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 158 64% 52%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    
+    /* Borders & Inputs */
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 160 84% 39%;
+    
+    --radius: 0.75rem;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 9% 46%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 160 84% 95%;
+    --sidebar-accent-foreground: 160 84% 39%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 160 84% 39%;
+    
+    /* Chart Colors */
+    --chart-1: 160 84% 39%;
+    --chart-2: 158 64% 52%;
+    --chart-3: 217 91% 60%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 84% 60%;
+  }
+
+  .dark {
+    --primary: 158 64% 52%;
+    --primary-foreground: 220 14% 10%;
+    --background: 220 14% 10%;
+    --foreground: 210 20% 98%;
+    --card: 220 14% 14%;
+    --card-foreground: 210 20% 98%;
+    --popover: 220 14% 14%;
+    --popover-foreground: 210 20% 98%;
+    --secondary: 220 14% 18%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 220 14% 18%;
+    --muted-foreground: 220 9% 60%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+    --border: 220 14% 20%;
+    --input: 220 14% 20%;
+    --ring: 158 64% 52%;
+    --sidebar-background: 220 14% 12%;
+    --sidebar-foreground: 220 9% 60%;
+    --sidebar-primary: 158 64% 52%;
+    --sidebar-primary-foreground: 220 14% 10%;
+    --sidebar-accent: 160 84% 20%;
+    --sidebar-accent-foreground: 158 64% 52%;
+    --sidebar-border: 220 14% 20%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-foreground;
+  }
+}
+
+@layer components {
+  .container-main {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .card-base {
+    @apply bg-card rounded-xl border border-border shadow-sm hover:shadow-md transition-all duration-200;
+  }
+  
+  .stat-card {
+    @apply card-base p-6 flex items-start gap-4;
+  }
+  
+  .metric-value {
+    @apply text-3xl font-bold tabular-nums tracking-tight;
+  }
+  
+  .metric-label {
+    @apply text-sm text-muted-foreground font-medium;
+  }
+  
+  .metric-change {
+    @apply text-xs font-medium flex items-center gap-1;
+  }
+  
+  .metric-change-positive {
+    @apply metric-change text-success;
+  }
+  
+  .metric-change-negative {
+    @apply metric-change text-destructive;
+  }
+  
+  .badge-base {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-medium;
+  }
+  
+  .badge-organic {
+    @apply badge-base bg-emerald-100 text-emerald-700;
+  }
+  
+  .badge-plastic {
+    @apply badge-base bg-blue-100 text-blue-700;
+  }
+  
+  .badge-metal {
+    @apply badge-base bg-gray-100 text-gray-700;
+  }
+  
+  .badge-paper {
+    @apply badge-base bg-amber-100 text-amber-700;
+  }
+  
+  .badge-ewaste {
+    @apply badge-base bg-purple-100 text-purple-700;
+  }
+  
+  .badge-textile {
+    @apply badge-base bg-pink-100 text-pink-700;
+  }
+  
+  .nav-link {
+    @apply px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors duration-200 relative;
+  }
+  
+  .nav-link-active {
+    @apply text-primary after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-primary after:rounded-full;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-all duration-200;
+  }
+  
+  .sidebar-link-active {
+    @apply bg-sidebar-accent text-sidebar-primary border-l-2 border-primary;
+  }
+  
+  .input-base {
+    @apply w-full rounded-lg border border-input bg-background px-4 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground shadow-sm hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200;
+  }
+  
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-lg border border-border bg-transparent px-4 py-2.5 text-sm font-medium text-foreground shadow-sm hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200;
+  }
+  
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg bg-transparent px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 transition-all duration-200;
+  }
+  
+  .progress-bar {
+    @apply h-2 rounded-full bg-secondary overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply h-full rounded-full bg-primary transition-all duration-500 ease-out;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-primary-light bg-clip-text text-transparent;
+  }
+  
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+}
