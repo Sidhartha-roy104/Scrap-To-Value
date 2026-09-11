@@ -44,6 +44,7 @@ const App = () => (
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/plans" element={<Plans />} />
                 <Route path="/orders" element={<Orders />} />
+                <Route path="/my-orders" element={<Orders />} />
                 <Route path="/orders/:orderId" element={<OrderTracking />} />
               </Route>
               <Route path="*" element={<NotFound />} />

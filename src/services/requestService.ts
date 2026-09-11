@@ -46,6 +46,7 @@ export interface CollectionRequest {
     title: string;
     unit: string;
     image_url?: string | null;
+    location?: string | null;
     available_quantity?: number;
   };
   buyer?: {

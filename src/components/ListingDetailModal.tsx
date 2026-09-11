@@ -1,27 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { deleteListing, updateListing } from '@/services/listingService';
+import { deleteListing } from '@/services/listingService';
+import { createRequest } from '@/services/requestService';
 import { 
   MapPin, 
   Clock, 
-  Scale,
-  IndianRupee,
-  ShoppingCart,
-  CheckCircle2,
-  ArrowLeft,
-  Pencil,
+  Scale, 
+  IndianRupee, 
+  CheckCircle2, 
+  ArrowLeft, 
+  Pencil, 
   Trash2,
+  Send,
+  Building2,
+  Phone,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
-import { PaymentCheckout } from '@/components/PaymentCheckout';
 import { WasteBadge } from '@/components/WasteBadge';
 import { Spinner } from '@/components/Spinner';
 import { WasteType, formatCurrency, formatRelativeTime } from '@/data/mockData';
-import { useNotifications } from '@/hooks/useNotifications';
 import { useToastNotification } from '@/components/ToastNotification';
 import type { DbWasteListing } from '@/hooks/useWasteListings';
 import { SellerRatingBadge } from '@/components/SellerRatingBadge';
@@ -33,51 +35,110 @@ interface ListingDetailModalProps {
   onEdit?: (listing: DbWasteListing) => void;
 }
 
-interface ListingDetailModalProps {
-  listing: DbWasteListing | null;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-type PurchaseStatus = 'idle' | 'confirming' | 'payment' | 'submitted';
-
 export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: ListingDetailModalProps) {
-  const [purchaseStatus, setPurchaseStatus] = useState<PurchaseStatus>('idle');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const { addToast } = useToastNotification();
-  const { addNotification } = useNotifications();
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const isOwner = user?.id === listing?.user_id;
+  const { addToast } = useToastNotification();
+
+  // Request form state
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [requestedQuantity, setRequestedQuantity] = useState<string>('');
+  const [buyerMessage, setBuyerMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Owner action state
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Initialize or reset form whenever modal opens or listing changes
+  useEffect(() => {
+    if (listing) {
+      setRequestedQuantity(String(listing.quantity));
+      setBuyerMessage('');
+      setIsRequesting(false);
+      setIsSubmitted(false);
+      setErrorMessage(null);
+    }
+  }, [listing, isOpen]);
 
   if (!listing) return null;
 
-  const handleRequestPurchase = async () => {
+  const isOwner = user?.id === listing.user_id;
+  const isBuyer = user?.role === 'buyer';
+  const availableQty = Number(listing.quantity);
+  const pricePerKg = Number(listing.price_per_kg);
+  const numQty = parseFloat(requestedQuantity) || 0;
+  const calculatedTotal = Math.max(0, parseFloat((numQty * pricePerKg).toFixed(2)));
+
+  // Validation logic
+  const isQuantityValid = numQty > 0 && numQty <= availableQty;
+  let quantityError: string | null = null;
+  if (requestedQuantity !== '' && numQty <= 0) {
+    quantityError = 'Quantity must be greater than 0.';
+  } else if (numQty > availableQty) {
+    quantityError = `Quantity cannot exceed available ${availableQty} ${listing.unit || 'kg'}.`;
+  }
+
+  const handleClose = () => {
+    setIsRequesting(false);
+    setIsSubmitted(false);
+    setErrorMessage(null);
+    onClose();
+  };
+
+  const handleSubmitRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!user) {
       handleClose();
       navigate('/auth');
       return;
     }
-    if (purchaseStatus === 'idle') {
-      setPurchaseStatus('confirming');
-      return;
-    }
 
-    if (purchaseStatus === 'confirming') {
-      setPurchaseStatus('payment');
-    }
-  };
+    if (!isQuantityValid) return;
 
-  const handleClose = () => {
-    setPurchaseStatus('idle');
-    onClose();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await createRequest({
+        listing_id: listing.id,
+        requested_quantity: numQty,
+        buyer_message: buyerMessage.trim() || undefined,
+      });
+
+      setIsSubmitted(true);
+      addToast({
+        type: 'success',
+        title: 'Request Sent',
+        message: `Your request for ${numQty} ${listing.unit || 'kg'} of ${listing.waste_type} scrap is now pending seller approval.`,
+      });
+
+      // Invalidate requests cache if buyer/seller has request lists
+      queryClient.invalidateQueries({ queryKey: ['collection_requests'] });
+
+      // Automatically close after a short delay
+      setTimeout(() => {
+        handleClose();
+      }, 2000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit request';
+      setErrorMessage(msg);
+      addToast({
+        type: 'error',
+        title: 'Request Failed',
+        message: msg,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Listing Details" size="lg">
       <div className="space-y-6">
-        {/* Image */}
+        {/* Listing Image */}
         <ListingImage
           src={listing.image_url}
           alt={listing.title}
@@ -85,7 +146,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
           fallbackCategory={listing.waste_type}
         />
 
-        {/* Header */}
+        {/* Header Title & Pricing */}
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="mb-2">
@@ -95,11 +156,13 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
             <p className="text-sm text-muted-foreground mt-1">
               Posted {formatRelativeTime(listing.created_at)}
             </p>
-            <SellerRatingBadge sellerId={listing.user_id} size="md" />
+            <div className="mt-2">
+              <SellerRatingBadge sellerId={listing.user_id} size="md" />
+            </div>
           </div>
           <div className="text-right">
             <p className="text-2xl font-bold text-foreground">
-              {formatCurrency(listing.price_per_kg)}
+              {formatCurrency(pricePerKg)}
               <span className="text-sm font-normal text-muted-foreground">/kg</span>
             </p>
             <p className="text-sm text-muted-foreground">
@@ -112,12 +175,12 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-secondary/50 rounded-lg p-3 text-center">
             <Scale className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
-            <p className="text-sm font-semibold text-foreground">{listing.quantity} {listing.unit}</p>
-            <p className="text-xs text-muted-foreground">Quantity</p>
+            <p className="text-sm font-semibold text-foreground">{listing.quantity} {listing.unit || 'kg'}</p>
+            <p className="text-xs text-muted-foreground">Available</p>
           </div>
           <div className="bg-secondary/50 rounded-lg p-3 text-center">
             <IndianRupee className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
-            <p className="text-sm font-semibold text-foreground">{formatCurrency(listing.price_per_kg)}</p>
+            <p className="text-sm font-semibold text-foreground">{formatCurrency(pricePerKg)}</p>
             <p className="text-xs text-muted-foreground">Per kg</p>
           </div>
           <div className="bg-secondary/50 rounded-lg p-3 text-center">
@@ -132,155 +195,246 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
           </div>
         </div>
 
+        {/* Seller Info (if available from API) */}
+        {listing.seller && (
+          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/60">
+            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+              {listing.seller.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seller</span>
+                <span className="text-sm font-semibold text-foreground truncate">{listing.seller.name}</span>
+              </div>
+              {listing.seller.company && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                  <Building2 className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{listing.seller.company}</span>
+                </div>
+              )}
+            </div>
+            {listing.seller.phone && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/80 px-2.5 py-1 rounded-md border border-border/40">
+                <Phone className="h-3 w-3 text-primary" />
+                <span>{listing.seller.phone}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Description */}
         {listing.description && (
           <div>
-            <h4 className="text-sm font-semibold text-foreground mb-2">Description</h4>
-            <p className="text-sm text-muted-foreground leading-relaxed">{listing.description}</p>
+            <h4 className="text-sm font-semibold text-foreground mb-1.5">Description</h4>
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{listing.description}</p>
           </div>
         )}
 
         {/* Owner Actions */}
-        {isOwner && listing.status === 'Available' && (
-          <div className="border-t border-border pt-4 flex gap-3">
-            <button
-              onClick={() => { onEdit?.(listing); handleClose(); }}
-              className="btn-secondary flex-1 gap-2"
-            >
-              <Pencil className="h-4 w-4" /> Edit Listing
-            </button>
-            <button
-              onClick={async () => {
-                if (!confirm('Are you sure you want to delete this listing?')) return;
-                setIsDeleting(true);
-                try {
-                  await deleteListing(listing.id);
-                  queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
-                  addToast({ type: 'success', title: 'Listing Deleted' });
-                  handleClose();
-                } catch (err: any) {
-                  addToast({ type: 'error', title: err.message || 'Failed to delete' });
-                } finally {
-                  setIsDeleting(false);
-                }
-              }}
-              disabled={isDeleting}
-              className="btn-secondary gap-2 text-destructive hover:bg-destructive/10"
-            >
-              {isDeleting ? <Spinner size="sm" /> : <Trash2 className="h-4 w-4" />}
-              Delete
-            </button>
-          </div>
-        )}
-
-        {/* Purchase Action (hidden for owner) */}
-        {!isOwner && <div className="border-t border-border pt-4">
-          {!user ? (
-            <div className="flex flex-col items-center gap-3 py-3 bg-secondary/50 rounded-lg px-4">
-              <p className="text-sm text-muted-foreground text-center">
-                You need to <strong className="text-foreground">sign in</strong> or <strong className="text-foreground">create an account</strong> to purchase this listing.
-              </p>
-              <button
-                onClick={() => { handleClose(); navigate('/auth'); }}
-                className="btn-primary gap-2"
-              >
-                Sign In / Sign Up
-              </button>
-            </div>
-          ) : purchaseStatus === 'submitted' ? (
-            <div className="flex items-center justify-center gap-2 py-3 bg-primary/5 rounded-lg">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              <p className="text-sm font-medium text-primary">Payment successful! Order confirmed.</p>
-            </div>
-          ) : purchaseStatus === 'payment' ? (
-            <div>
-              <button
-                onClick={() => setPurchaseStatus('confirming')}
-                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-3 transition-colors"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back
-              </button>
-              <PaymentCheckout
-                amount={listing.total_price}
-                description={`Purchase: ${listing.title} — ${listing.quantity} ${listing.unit}`}
-                onSuccess={async (paymentId) => {
-                  // Create transaction in the database
-                  try {
-                    const { data: txData, error } = await supabase
-                      .from('transactions')
-                      .insert({
-                        buyer_id: user!.id,
-                        seller_id: listing.user_id,
-                        listing_id: listing.id,
-                        waste_type: listing.waste_type,
-                        quantity: listing.quantity,
-                        amount: listing.total_price,
-                        status: 'Processing',
-                        tracking_updates: [
-                          { status: 'Order Placed', timestamp: new Date().toISOString(), note: `Payment ID: ${paymentId}` },
-                        ],
-                      })
-                      .select('id')
-                      .single();
-
-                    if (error) throw error;
-
-                    // Mark listing as sold
-                    await updateListing(listing.id, { status: 'Sold' });
-
-                    queryClient.invalidateQueries({ queryKey: ['transactions'] });
-                    queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
-
-                    setPurchaseStatus('submitted');
-                    addToast({
-                      type: 'success',
-                      title: 'Payment Successful!',
-                      message: `Payment of ${formatCurrency(listing.total_price)} completed for ${listing.title}.`,
-                    });
-                    // Notifications are now auto-generated by database triggers
-
-                    // Redirect to order tracking after a short delay
-                    setTimeout(() => {
-                      handleClose();
-                      navigate(`/orders/${txData.id}`);
-                    }, 1500);
-                  } catch (err: any) {
-                    addToast({
-                      type: 'error',
-                      title: 'Order Failed',
-                      message: err.message || 'Could not create order. Please try again.',
-                    });
-                    setPurchaseStatus('confirming');
-                  }
-                }}
-                onCancel={() => setPurchaseStatus('confirming')}
-              />
-            </div>
-          ) : (
-            <div className="flex flex-col sm:flex-row gap-3">
-              {purchaseStatus === 'confirming' && (
-                <p className="text-sm text-muted-foreground flex-1 flex items-center">
-                  Confirm your purchase for <strong className="text-foreground mx-1">{formatCurrency(listing.total_price)}</strong>?
-                </p>
-              )}
-              {purchaseStatus === 'confirming' && (
-                <button onClick={() => setPurchaseStatus('idle')} className="btn-secondary">
-                  Cancel
+        {isOwner && (
+          <div className="border-t border-border pt-4">
+            <p className="text-xs text-muted-foreground mb-3 italic">You are the seller of this listing.</p>
+            <div className="flex gap-3">
+              {listing.status === 'Available' && (
+                <button
+                  onClick={() => { onEdit?.(listing); handleClose(); }}
+                  className="btn-secondary flex-1 gap-2"
+                >
+                  <Pencil className="h-4 w-4" /> Edit Listing
                 </button>
               )}
               <button
-                onClick={handleRequestPurchase}
-                className={`btn-primary gap-2 ${purchaseStatus === 'idle' ? 'flex-1' : ''}`}
+                onClick={async () => {
+                  if (!confirm('Are you sure you want to delete this listing?')) return;
+                  setIsDeleting(true);
+                  try {
+                    await deleteListing(listing.id);
+                    queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+                    addToast({ type: 'success', title: 'Listing Deleted' });
+                    handleClose();
+                  } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : 'Failed to delete';
+                    addToast({ type: 'error', title: msg });
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                disabled={isDeleting}
+                className="btn-secondary gap-2 text-destructive hover:bg-destructive/10"
               >
-                {purchaseStatus === 'confirming' ? (
-                  'Proceed to Payment'
-                ) : (
-                  <><ShoppingCart className="h-4 w-4" />Buy Now</>
-                )}
+                {isDeleting ? <Spinner size="sm" /> : <Trash2 className="h-4 w-4" />}
+                Delete
               </button>
             </div>
-          )}
-        </div>}
+          </div>
+        )}
+
+        {/* Buyer Request Section (hidden for owner) */}
+        {!isOwner && (
+          <div className="border-t border-border pt-4">
+            {!user ? (
+              <div className="flex flex-col items-center gap-3 py-4 bg-secondary/40 rounded-xl px-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  You need to <strong className="text-foreground">sign in</strong> or <strong className="text-foreground">create a buyer account</strong> to request scrap from this listing.
+                </p>
+                <button
+                  onClick={() => { handleClose(); navigate('/auth'); }}
+                  className="btn-primary gap-2"
+                >
+                  Sign In / Sign Up
+                </button>
+              </div>
+            ) : isSubmitted ? (
+              <div className="flex items-center justify-center gap-3 py-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
+                    Request Submitted Successfully!
+                  </p>
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                    Status is <span className="font-semibold uppercase tracking-wider">pending</span>. The seller will review your request.
+                  </p>
+                </div>
+              </div>
+            ) : isRequesting ? (
+              <form onSubmit={handleSubmitRequest} className="space-y-4 bg-secondary/30 p-4 rounded-xl border border-border/60">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    <Send className="h-4 w-4 text-primary" /> Request Scrap Quantity
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => { setIsRequesting(false); setErrorMessage(null); }}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                  >
+                    <ArrowLeft className="h-3 w-3" /> Back
+                  </button>
+                </div>
+
+                {errorMessage && (
+                  <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-lg text-xs flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <span>{errorMessage}</span>
+                  </div>
+                )}
+
+                {/* Requested Quantity */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-foreground">
+                      Requested Quantity ({listing.unit || 'kg'}) <span className="text-destructive">*</span>
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      Max available: {availableQty} {listing.unit || 'kg'}
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max={availableQty}
+                    step="any"
+                    value={requestedQuantity}
+                    onChange={(e) => setRequestedQuantity(e.target.value)}
+                    required
+                    placeholder={`e.g. ${availableQty}`}
+                    className={`input-base ${quantityError ? 'border-destructive focus:ring-destructive' : ''}`}
+                  />
+                  {quantityError && (
+                    <p className="text-xs text-destructive mt-1">{quantityError}</p>
+                  )}
+                </div>
+
+                {/* Live Total Calculation Card */}
+                <div className="p-3 bg-background rounded-lg border border-border flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-muted-foreground block">Estimated Total Value</span>
+                    <span className="text-xs text-muted-foreground">
+                      {numQty > 0 ? numQty : 0} {listing.unit || 'kg'} × {formatCurrency(pricePerKg)}/kg
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-foreground block">
+                      {formatCurrency(calculatedTotal)}
+                    </span>
+                    <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      Pending seller approval
+                    </span>
+                  </div>
+                </div>
+
+                {/* Optional Buyer Message */}
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">
+                    Optional Message to Seller
+                  </label>
+                  <textarea
+                    value={buyerMessage}
+                    onChange={(e) => setBuyerMessage(e.target.value)}
+                    placeholder="Add notes about pickup schedule, transportation, or questions for the seller..."
+                    rows={3}
+                    maxLength={1000}
+                    className="input-base text-sm resize-none"
+                  />
+                </div>
+
+                {/* Form Buttons */}
+                <div className="flex gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setIsRequesting(false); setErrorMessage(null); }}
+                    disabled={isSubmitting}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!isQuantityValid || isSubmitting}
+                    className="btn-primary flex-1 gap-2"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Confirm & Send Request
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-foreground">Interested in this material?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Submit a collection request for the quantity you need.
+                  </p>
+                </div>
+                {listing.status !== 'Available' ? (
+                  <button disabled className="btn-secondary opacity-60 cursor-not-allowed">
+                    {listing.status}
+                  </button>
+                ) : user.role === 'seller' ? (
+                  <div className="text-xs text-muted-foreground bg-secondary/50 px-3 py-2 rounded-lg text-right">
+                    Logged in as Seller. (Only buyers can request listings)
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsRequesting(true)}
+                    className="btn-primary gap-2 w-full sm:w-auto"
+                  >
+                    <Send className="h-4 w-4" />
+                    Request Scrap
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );
