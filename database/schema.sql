@@ -88,7 +88,9 @@ CREATE TABLE IF NOT EXISTS collection_requests (
   seller_id           CHAR(36)        NOT NULL,
   waste_type          VARCHAR(100)    NOT NULL,
   quantity            DECIMAL(10, 2)  NOT NULL,
+  price_per_kg        DECIMAL(10, 2)  NOT NULL,
   amount              DECIMAL(12, 2)  NOT NULL,
+  buyer_message       TEXT            DEFAULT NULL,
   status              ENUM(
                         'pending',
                         'confirmed',

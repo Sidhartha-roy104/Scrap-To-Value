@@ -19,6 +19,7 @@ const healthRoutes = require('./routes/healthRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const listingRoutes = require('./routes/listingRoutes');
+const requestRoutes = require('./routes/requestRoutes');
 
 const app = express();
 
@@ -114,9 +115,9 @@ app.use('/api/health', healthRoutes);
 app.use('/api/auth', authLimiter, authRoutes); // Phase 2 ✅
 app.use('/api/users', userRoutes);
 app.use('/api/listings', listingRoutes); // Scrap listings & marketplace
+app.use('/api/requests', requestRoutes); // Collection requests & buyer orders
 
 // Phase 3+ routes (not yet implemented):
-// app.use('/api/requests',      require('./routes/requestRoutes'));
 // app.use('/api/dashboard',     require('./routes/dashboardRoutes'));
 // app.use('/api/notifications', require('./routes/notificationRoutes'));
 // app.use('/api/admin',         require('./routes/adminRoutes'));

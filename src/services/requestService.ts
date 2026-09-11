@@ -1,21 +1,14 @@
 /**
  * requestService.ts
  * ------------------
- * Collection request (order) service for the Rubbish Revamp backend REST API.
- *
- * PHASE 1 STATUS: Stubs only — NOT connected to any backend endpoint.
- * CURRENT DATA SOURCE: Supabase `transactions` table (see src/hooks/useTransactions.ts).
- *
- * In Phase 2:
- *   - Implement each function against /api/requests endpoints.
- *   - The Supabase `transactions` table maps to `collection_requests` in MySQL.
- *   - Replace Supabase calls in useTransactions.ts with these functions.
+ * Collection request service for the Rubbish Revamp REST API.
+ * Connected to Node.js backend (/api/requests) backed by MySQL.
  */
 
 import { apiClient, type ApiResponse } from '@/services/api';
 
 // ---------------------------------------------------------------------------
-// Types (mirrors Supabase transactions Row)
+// Types
 // ---------------------------------------------------------------------------
 
 export type RequestStatus =
@@ -34,88 +27,120 @@ export interface TrackingUpdate {
 
 export interface CollectionRequest {
   id: string;
-  listingId: string | null;
-  buyerId: string;
-  sellerId: string;
-  wasteType: string;
+  listing_id: string;
+  buyer_id: string;
+  seller_id: string;
+  waste_type: string;
   quantity: number;
+  price_per_kg: number;
   amount: number;
+  buyer_message?: string | null;
   status: RequestStatus;
-  trackingUpdates: TrackingUpdate[];
-  estimatedDelivery: string | null;
-  createdAt: string;
-  updatedAt: string;
+  tracking_updates: TrackingUpdate[];
+  estimated_delivery?: string | null;
+  delivery_otp?: string | null;
+  created_at: string;
+  updated_at: string;
+  listing?: {
+    id: string;
+    title: string;
+    unit: string;
+    image_url?: string | null;
+    available_quantity?: number;
+  };
+  buyer?: {
+    id: string;
+    name: string;
+    email: string;
+    company?: string | null;
+    phone?: string | null;
+  };
+  seller?: {
+    id: string;
+    name: string;
+    email: string;
+    company?: string | null;
+    phone?: string | null;
+  };
 }
 
 export interface CreateRequestPayload {
-  listingId: string;
-  quantity: number;
-  amount: number;
-  wasteType: string;
-  estimatedDelivery?: string;
+  listing_id: string;
+  requested_quantity: number;
+  buyer_message?: string | null;
 }
 
-export interface UpdateRequestPayload {
-  status?: RequestStatus;
-  trackingUpdate?: TrackingUpdate;
-  estimatedDelivery?: string;
+export interface PaginatedRequests {
+  requests: CollectionRequest[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 // ---------------------------------------------------------------------------
-// Service functions (Phase 2 — TODO)
+// Service Functions
 // ---------------------------------------------------------------------------
 
 /**
- * TODO Phase 2: GET /api/requests
- * Returns all collection requests for the current user (buyer or seller view).
- */
-export async function getRequests(): Promise<ApiResponse<CollectionRequest[]>> {
-  // TODO Phase 2: return apiClient.get('/api/requests');
-  throw new Error('[requestService] getRequests() is not implemented yet. Currently handled by Supabase.');
-}
-
-/**
- * TODO Phase 2: GET /api/requests/:id
- * Returns a single collection request with full tracking history.
- */
-export async function getRequestById(
-  _id: string,
-): Promise<ApiResponse<CollectionRequest>> {
-  // TODO Phase 2: return apiClient.get(`/api/requests/${id}`);
-  throw new Error('[requestService] getRequestById() is not implemented yet. Currently handled by Supabase.');
-}
-
-/**
- * TODO Phase 2: POST /api/requests
- * Creates a new collection request (buyer places an order).
+ * POST /api/requests
+ * Creates a new scrap collection request for the authenticated buyer.
  */
 export async function createRequest(
-  _payload: CreateRequestPayload,
-): Promise<ApiResponse<CollectionRequest>> {
-  // TODO Phase 2: return apiClient.post('/api/requests', payload);
-  throw new Error('[requestService] createRequest() is not implemented yet. Currently handled by Supabase.');
+  payload: CreateRequestPayload,
+): Promise<ApiResponse<{ request: CollectionRequest }>> {
+  return apiClient.post<ApiResponse<{ request: CollectionRequest }>>(
+    '/api/requests',
+    payload,
+  );
 }
 
 /**
- * TODO Phase 2: PATCH /api/requests/:id
- * Updates a request status or adds a tracking update.
+ * GET /api/requests
+ * Retrieves all collection requests associated with the authenticated user.
  */
-export async function updateRequest(
-  _id: string,
-  _payload: UpdateRequestPayload,
-): Promise<ApiResponse<CollectionRequest>> {
-  // TODO Phase 2: return apiClient.patch(`/api/requests/${id}`, payload);
-  throw new Error('[requestService] updateRequest() is not implemented yet. Currently handled by Supabase.');
+export async function getRequests(params?: {
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<ApiResponse<PaginatedRequests>> {
+  const query = new URLSearchParams();
+  if (params?.status) query.append('status', params.status);
+  if (params?.page) query.append('page', String(params.page));
+  if (params?.limit) query.append('limit', String(params.limit));
+
+  const qs = query.toString();
+  return apiClient.get<ApiResponse<PaginatedRequests>>(
+    `/api/requests${qs ? `?${qs}` : ''}`,
+  );
 }
 
 /**
- * TODO Phase 2: POST /api/requests/:id/confirm-delivery
- * Buyer confirms delivery (OTP or manual).
+ * GET /api/requests/:id
+ * Retrieves a single collection request by ID.
  */
-export async function confirmDelivery(
-  _id: string,
-  _otp?: string,
-): Promise<ApiResponse<CollectionRequest>> {
-  // TODO Phase 2: return apiClient.post(`/api/requests/${id}/confirm-delivery`, { otp });
-  throw new Error('[requestService] confirmDelivery() is not implemented yet. Currently handled by Supabase.');
+export async function getRequestById(
+  id: string,
+): Promise<ApiResponse<{ request: CollectionRequest }>> {
+  return apiClient.get<ApiResponse<{ request: CollectionRequest }>>(
+    `/api/requests/${id}`,
+  );
+}
+
+/**
+ * PATCH /api/requests/:id/status
+ * Updates status of a request (confirmed, in_transit, delivered, cancelled).
+ */
+export async function updateRequestStatus(
+  id: string,
+  payload: {
+    status: RequestStatus;
+    note?: string;
+    estimated_delivery?: string;
+  },
+): Promise<ApiResponse<{ request: CollectionRequest }>> {
+  return apiClient.patch<ApiResponse<{ request: CollectionRequest }>>(
+    `/api/requests/${id}/status`,
+    payload,
+  );
 }
