@@ -12,8 +12,15 @@ export function RoleSelectionScreen() {
   const handleSubmit = async () => {
     try {
       await setRole(selected);
-    } catch {
-      addToast({ type: 'error', title: 'Failed to set role. Please try again.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to set role.';
+      // In Phase 2, setRole is stubbed for REST users (role is set at registration).
+      // Only legacy Supabase users without a role would reach this screen.
+      if (message.includes('Phase 2')) {
+        addToast({ type: 'error', title: 'Please register again to set your role.' });
+      } else {
+        addToast({ type: 'error', title: 'Failed to set role. Please try again.' });
+      }
     }
   };
 
@@ -29,8 +36,8 @@ export function RoleSelectionScreen() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md text-center"
       >
-        <img src="/logo.png" alt="Scrap to Value" className="h-12 w-12 rounded-xl mx-auto mb-6" />
-        <h1 className="text-2xl font-bold text-foreground mb-2">How will you use Scrap to Value?</h1>
+        <img src="/logo.png" alt="Rubbish Revamp" className="h-12 w-12 rounded-xl mx-auto mb-6" />
+        <h1 className="text-2xl font-bold text-foreground mb-2">How will you use Rubbish Revamp?</h1>
         <p className="text-muted-foreground mb-8">Choose your role to get started</p>
 
         <div className="grid grid-cols-2 gap-4 mb-8">

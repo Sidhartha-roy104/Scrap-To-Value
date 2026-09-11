@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationDropdown } from '@/components/NotificationDropdown';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { getCurrentUser } from '@/services/userService';
 import { 
   Menu, 
   X, 
@@ -30,17 +30,47 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { user, signOut } = useAuth();
-  const [profile, setProfile] = useState<{ display_name: string | null; avatar_url: string | null }>({ display_name: null, avatar_url: null });
+  const [profile, setProfile] = useState<{ display_name: string | null; avatar_url: string | null }>({
+    display_name: user?.full_name || null,
+    avatar_url: user?.avatar_url || null,
+  });
 
   useEffect(() => {
+    let isMounted = true;
+
     if (user) {
-      supabase.from('profiles').select('display_name, avatar_url').eq('user_id', user.id).single()
-        .then(({ data }) => { if (data) setProfile(data); });
+      // Sync immediately with context user state
+      setProfile({
+        display_name: user.full_name || null,
+        avatar_url: user.avatar_url || null,
+      });
+
+      // Fetch fresh profile from Express + MySQL (/api/users/me)
+      getCurrentUser()
+        .then((userData) => {
+          if (isMounted && userData) {
+            setProfile({
+              display_name: userData.full_name || null,
+              avatar_url: userData.avatar_url || null,
+            });
+          }
+        })
+        .catch((err) => {
+          // Keep existing context state if request fails; do not crash Navbar
+          console.warn('[Navbar] Could not fetch profile from /api/users/me:', err.message);
+        });
+    } else {
+      setProfile({ display_name: null, avatar_url: null });
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [user]);
 
-  const initials = profile.display_name
-    ? profile.display_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+  const displayName = profile.display_name || user?.full_name || '';
+  const initials = displayName
+    ? displayName.trim().split(/\s+/).map(n => n[0]).join('').toUpperCase().slice(0, 2)
     : (user?.email?.[0]?.toUpperCase() || 'U');
 
   return (
@@ -80,8 +110,8 @@ export function Navbar() {
 
         {/* Mobile Logo */}
         <Link to="/" className="lg:hidden flex items-center gap-2">
-          <img src="/logo.png" alt="Scrap to Value" className="h-8 w-8 rounded-lg" />
-          <span className="font-semibold text-foreground">Scrap to Value</span>
+          <img src="/logo.png" alt="Rubbish Revamp" className="h-8 w-8 rounded-lg" />
+          <span className="font-semibold text-foreground">Rubbish Revamp</span>
         </Link>
 
         {/* Desktop Navigation */}
@@ -132,7 +162,7 @@ export function Navbar() {
                 <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
                 <div className="absolute right-0 top-full mt-2 w-48 bg-card rounded-xl border border-border shadow-lg z-50 py-1">
                   <div className="px-4 py-2 border-b border-border">
-                    <p className="text-sm font-medium text-foreground truncate">{profile.display_name || 'User'}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{displayName || 'User'}</p>
                     <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                   </div>
                   <Link

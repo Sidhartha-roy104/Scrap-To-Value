@@ -1,4 +1,4 @@
-# ♻️ Scrap to Value — B2B Scrap Trading Marketplace
+# ♻️ Rubbish Revamp — Digital Recycling Marketplace
 
 > **Turn Your Factory Scrap Into Real Revenue**  
 > A full-stack digital marketplace connecting MSME scrap sellers with verified buyers across India — with secure escrow payments, AI-powered matching, and real-time pricing.
@@ -55,17 +55,27 @@ Every year, thousands of Indian MSMEs lose revenue on scrap because:
 
 ## 🛠️ Tech Stack
 
+### Current Implementation
 | Layer | Technology |
 |---|---|
-| **Frontend** | React.js, React Router v6, Tailwind CSS |
-| **State Management** | Context API / Zustand |
-| **Backend** | Node.js, Express.js |
-| **Database** | MySQL (relational data), MongoDB (documents/logs) |
-| **Authentication** | JWT-based auth with role detection |
-| **PDF Generation** | FPDF2 / PDFKit |
-| **Charts** | Recharts / Plotly |
+| **Frontend** | React 18 + TypeScript 5.8, Vite 5.4 (SWC) |
+| **Styling** | Tailwind CSS v3, shadcn/ui (Radix UI), Framer Motion |
+| **Routing** | React Router DOM v6 |
+| **State / Data** | TanStack React Query v5, React Context API |
+| **Forms** | React Hook Form + Zod |
 | **Icons** | Lucide React |
-| **Hosting** | (Deployment ready) |
+| **Backend (current)** | Supabase (PostgreSQL BaaS + Auth + Realtime + Storage) |
+| **Charts** | Recharts |
+| **Themes** | next-themes (Dark/Light mode) |
+
+### Target Architecture (Node.js Migration — In Progress)
+| Layer | Technology |
+|---|---|
+| **Backend** | Node.js 18+ + Express.js |
+| **Database** | MySQL 8.0 |
+| **DB Client** | mysql2/promise |
+| **Auth** | JWT + bcrypt |
+| **API** | RESTful JSON API |
 
 ---
 

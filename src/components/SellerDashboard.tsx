@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   IndianRupee,
   Package,
@@ -8,9 +8,12 @@ import {
   Eye,
   Trash2,
   Pencil,
+  Plus,
   ChevronDown,
 } from 'lucide-react';
 import { EditListingModal } from '@/components/EditListingModal';
+import { CreateListingModal } from '@/components/CreateListingModal';
+import { ListingImage } from '@/components/ListingImage';
 import type { DbWasteListing } from '@/hooks/useWasteListings';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -32,12 +35,13 @@ const STATUS_FLOW = ['Processing', 'Shipped', 'Delivered'] as const;
 export function SellerDashboard() {
   const { user } = useAuth();
   const { stats, recentTransactions, isLoading: txLoading } = useTransactions();
-  const { listings, isLoading: listingsLoading } = useWasteListings();
+  const { listings, isLoading: listingsLoading, deleteListing } = useWasteListings();
   const { scoreData, isLoading: scoreLoading } = useGreenScore();
   const queryClient = useQueryClient();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingListing, setEditingListing] = useState<DbWasteListing | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const isLoading = txLoading || listingsLoading || scoreLoading;
 
   const updateOrderStatus = async (tx: DbTransaction, newStatus: string) => {
@@ -96,7 +100,7 @@ export function SellerDashboard() {
     return Object.entries(months).map(([month, revenue]) => ({ month, revenue }));
   }, [ordersReceived]);
 
-  const displayName = user?.user_metadata?.full_name || user?.email || 'Seller';
+  const displayName = user?.full_name || user?.email || 'Seller';
 
   if (isLoading) {
     return (
@@ -148,13 +152,27 @@ export function SellerDashboard() {
       <div className="card-base p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-foreground">My Listings ({myListings.length})</h3>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="btn-primary text-sm gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Create Listing
+          </button>
         </div>
         {myListings.length === 0 ? (
           <p className="text-sm text-muted-foreground py-8 text-center">You haven't posted any listings yet. Go to Marketplace to create one.</p>
         ) : (
           <div className="space-y-3">
             {myListings.slice(0, 5).map(listing => (
-              <div key={listing.id} className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+              <div key={listing.id} className="flex items-center gap-3.5 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+                <ListingImage
+                  src={listing.image_url}
+                  alt={listing.title}
+                  containerClassName="w-12 h-12 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative border border-border/40"
+                  className="w-full h-full object-cover"
+                  fallbackCategory={listing.waste_type}
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-foreground truncate">{listing.title}</span>
@@ -183,9 +201,7 @@ export function SellerDashboard() {
                           if (!confirm('Delete this listing?')) return;
                           setDeletingId(listing.id);
                           try {
-                            const { deleteListing } = await import('@/hooks/useWasteListings').then(m => ({ deleteListing: null }));
-                            await supabase.from('waste_listings').delete().eq('id', listing.id);
-                            queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+                            await deleteListing(listing.id);
                             toast.success('Listing deleted');
                           } catch (e: any) {
                             toast.error(e.message || 'Failed to delete');
@@ -256,6 +272,12 @@ export function SellerDashboard() {
         listing={editingListing}
         isOpen={!!editingListing}
         onClose={() => setEditingListing(null)}
+      />
+
+      {/* Create Listing Modal */}
+      <CreateListingModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
       />
     </div>
   );

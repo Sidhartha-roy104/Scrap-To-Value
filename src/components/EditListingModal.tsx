@@ -4,6 +4,7 @@ import { ImagePlus, X } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { Spinner } from '@/components/Spinner';
 import { useWasteListings, DbWasteListing } from '@/hooks/useWasteListings';
+import { uploadListingImage, resolveImageUrl } from '@/services/listingService';
 import { useToastNotification } from '@/components/ToastNotification';
 import { WasteType } from '@/data/mockData';
 
@@ -43,7 +44,7 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
         location: listing.location,
         description: listing.description || '',
       });
-      setImagePreview(listing.image_url || null);
+      setImagePreview(resolveImageUrl(listing.image_url) || null);
       setImageFile(null);
     }
   }, [listing, isOpen, reset]);
@@ -82,17 +83,7 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
 
       // Handle image upload if a new file was selected
       if (imageFile) {
-        const { supabase } = await import('@/integrations/supabase/client');
-        const fileExt = imageFile.name.split('.').pop();
-        const filePath = `${listing.user_id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('listing-images')
-          .upload(filePath, imageFile);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage
-          .from('listing-images')
-          .getPublicUrl(filePath);
-        updates.image_url = urlData.publicUrl;
+        updates.image_url = await uploadListingImage(imageFile);
       } else if (!imagePreview) {
         updates.image_url = null;
       }

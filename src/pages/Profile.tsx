@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { getCurrentUser } from '@/services/userService';
 import { supabase } from '@/integrations/supabase/client';
 import { useToastNotification } from '@/components/ToastNotification';
 import { User, Building2, Phone, MapPin, Camera, Loader2, Save } from 'lucide-react';
@@ -32,22 +33,31 @@ export default function Profile() {
   }, [user]);
 
   const fetchProfile = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', user!.id)
-      .single();
-
-    if (data) {
-      setProfile({
-        display_name: data.display_name || '',
-        phone: data.phone || '',
-        company_name: data.company_name || '',
-        company_address: data.company_address || '',
-        avatar_url: data.avatar_url || '',
-      });
+    try {
+      const data = await getCurrentUser();
+      if (data) {
+        setProfile({
+          display_name: data.full_name || '',
+          phone: data.phone || '',
+          company_name: data.company_name || '',
+          company_address: data.company_address || '',
+          avatar_url: data.avatar_url || '',
+        });
+      }
+    } catch (err: unknown) {
+      console.warn('[Profile] Could not fetch profile from /api/users/me:', err);
+      if (user) {
+        setProfile({
+          display_name: user.full_name || '',
+          phone: user.phone || '',
+          company_name: user.company_name || '',
+          company_address: user.company_address || '',
+          avatar_url: user.avatar_url || '',
+        });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {

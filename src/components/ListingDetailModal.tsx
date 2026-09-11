@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { deleteListing, updateListing } from '@/services/listingService';
 import { 
   MapPin, 
   Clock, 
@@ -15,6 +16,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Modal } from '@/components/Modal';
+import { ListingImage } from '@/components/ListingImage';
 import { PaymentCheckout } from '@/components/PaymentCheckout';
 import { WasteBadge } from '@/components/WasteBadge';
 import { Spinner } from '@/components/Spinner';
@@ -76,15 +78,12 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
     <Modal isOpen={isOpen} onClose={handleClose} title="Listing Details" size="lg">
       <div className="space-y-6">
         {/* Image */}
-        {listing.image_url && (
-          <div className="w-full h-52 rounded-lg overflow-hidden">
-            <img 
-              src={listing.image_url} 
-              alt={listing.title} 
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
+        <ListingImage
+          src={listing.image_url}
+          alt={listing.title}
+          containerClassName="w-full h-56 rounded-xl overflow-hidden bg-muted relative"
+          fallbackCategory={listing.waste_type}
+        />
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -155,8 +154,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                 if (!confirm('Are you sure you want to delete this listing?')) return;
                 setIsDeleting(true);
                 try {
-                  const { error } = await supabase.from('waste_listings').delete().eq('id', listing.id);
-                  if (error) throw error;
+                  await deleteListing(listing.id);
                   queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
                   addToast({ type: 'success', title: 'Listing Deleted' });
                   handleClose();
@@ -228,13 +226,10 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                     if (error) throw error;
 
                     // Mark listing as sold
-                    await supabase
-                      .from('waste_listings')
-                      .update({ status: 'Sold' })
-                      .eq('id', listing.id);
+                    await updateListing(listing.id, { status: 'Sold' });
 
                     queryClient.invalidateQueries({ queryKey: ['transactions'] });
-                    queryClient.invalidateQueries({ queryKey: ['waste-listings'] });
+                    queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
 
                     setPurchaseStatus('submitted');
                     addToast({

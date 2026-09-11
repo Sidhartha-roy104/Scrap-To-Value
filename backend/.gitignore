@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Uploaded files
+uploads/
+
+# Logs
+logs/
+*.log

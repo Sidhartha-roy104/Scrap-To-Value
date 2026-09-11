@@ -82,7 +82,7 @@ const steps = [
 ];
 
 const testimonials = [
-  { name: 'Rajesh Kumar', company: 'Kumar Textiles, Erode', quote: 'Scrap to Value helped us monetize our textile waste. We\'ve earned ₹3.2L in just 4 months.', rating: 5 },
+  { name: 'Rajesh Kumar', company: 'Kumar Textiles, Erode', quote: 'Rubbish Revamp helped us monetize our textile waste. We\'ve earned ₹3.2L in just 4 months.', rating: 5 },
   { name: 'Priya Nair', company: 'Nagercoil Coir Industries', quote: 'Finding reliable recyclers used to take weeks. Now it takes minutes. Incredible platform.', rating: 5 },
   { name: 'Suresh Babu', company: 'Trichy Metals', quote: 'Our Green Score went from 42 to 87. The insights dashboard is a game-changer for compliance.', rating: 5 },
 ];
@@ -94,8 +94,8 @@ export default function Landing() {
       <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-lg border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src="/logo.png" alt="Scrap to Value" className="h-9 w-9 rounded-xl" />
-            <span className="text-lg font-bold text-foreground tracking-tight">Scrap to Value</span>
+            <img src="/logo.png" alt="Rubbish Revamp" className="h-9 w-9 rounded-xl" />
+            <span className="text-lg font-bold text-foreground tracking-tight">Rubbish Revamp</span>
           </Link>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -335,7 +335,7 @@ export default function Landing() {
             Ready to Turn Your Waste Into Wealth?
           </h2>
           <p className="text-lg text-primary-foreground/80 mb-8 max-w-xl mx-auto">
-            Join 2,500+ MSMEs already using Scrap to Value to sell waste, save the environment, and boost their bottom line.
+            Join 2,500+ MSMEs already using Rubbish Revamp to sell waste, save the environment, and boost their bottom line.
           </p>
           <Link 
             to="/auth" 
@@ -353,8 +353,8 @@ export default function Landing() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2 md:col-span-1">
               <Link to="/" className="flex items-center gap-2 mb-4">
-                <img src="/logo.png" alt="Scrap to Value" className="h-8 w-8 rounded-lg" />
-                <span className="font-bold text-foreground">Scrap to Value</span>
+                <img src="/logo.png" alt="Rubbish Revamp" className="h-8 w-8 rounded-lg" />
+                <span className="font-bold text-foreground">Rubbish Revamp</span>
               </Link>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 India's leading industrial waste marketplace for MSMEs.
@@ -388,7 +388,7 @@ export default function Landing() {
             </div>
           </div>
           <div className="mt-10 pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-muted-foreground">© 2026 Scrap to Value. All rights reserved.</p>
+            <p className="text-xs text-muted-foreground">© 2026 Rubbish Revamp. All rights reserved.</p>
             <p className="text-xs text-muted-foreground">Made with 💚 in Tamil Nadu, India</p>
           </div>
         </div>

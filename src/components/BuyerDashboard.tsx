@@ -45,7 +45,7 @@ export function BuyerDashboard() {
     return Object.entries(months).map(([month, spent]) => ({ month, spent }));
   }, [completedPurchases]);
 
-  const displayName = user?.user_metadata?.full_name || user?.email || 'Buyer';
+  const displayName = user?.full_name || user?.email || 'Buyer';
 
   if (isLoading) {
     return (

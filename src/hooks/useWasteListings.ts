@@ -1,96 +1,140 @@
+/**
+ * hooks/useWasteListings.ts
+ * -------------------------
+ * Waste listing management hook connected to the Node.js + MySQL backend.
+ * Uses TanStack React Query for caching, optimistic updates, and instant invalidation.
+ */
+
 import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import type { Tables } from '@/integrations/supabase/types';
+import {
+  DbWasteListing,
+  ListingFilters,
+  getListings,
+  createListing,
+  updateListing,
+  deleteListing,
+  uploadListingImage,
+  CreateListingPayload,
+} from '@/services/listingService';
 
+export type { DbWasteListing, ListingFilters };
 
-export type DbWasteListing = Tables<'waste_listings'>;
-
-export interface ListingFilters {
-  search?: string;
-  wasteType?: string;
-  location?: string;
-  priceMin?: number;
-  priceMax?: number;
-  status?: string;
-}
-
-async function fetchListings(): Promise<DbWasteListing[]> {
-  const { data, error } = await supabase
-    .from('waste_listings')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+export interface CreateListingInput {
+  waste_type: string;
+  title: string;
+  quantity: number;
+  unit?: string;
+  price_per_kg: number;
+  location: string;
+  description: string;
+  image?: File;
 }
 
 export function useWasteListings() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
 
-  const { data: listings = [], isLoading } = useQuery({
+  // 1. Fetch Listings from MySQL backend via listingService
+  const {
+    data: listings = [],
+    isLoading,
+    error: queryError,
+    refetch,
+  } = useQuery({
     queryKey: ['waste_listings'],
-    queryFn: fetchListings,
-  });
-
-  const addMutation = useMutation({
-    mutationFn: async (input: {
-      waste_type: string;
-      title: string;
-      quantity: number;
-      unit: string;
-      price_per_kg: number;
-      total_price: number;
-      location: string;
-      description: string;
-      image?: File;
-    }) => {
-      if (!user) throw new Error('Not authenticated');
-
-      let image_url: string | null = null;
-
-      if (input.image) {
-        const fileExt = input.image.name.split('.').pop();
-        const filePath = `${user.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('listing-images')
-          .upload(filePath, input.image);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage
-          .from('listing-images')
-          .getPublicUrl(filePath);
-        image_url = urlData.publicUrl;
-      }
-
-      const { image, ...rest } = input;
-      const { error } = await supabase.from('waste_listings').insert({
-        ...rest,
-        user_id: user.id,
-        status: 'Available',
-        image_url,
-      });
-      if (error) throw error;
+    queryFn: async () => {
+      const res = await getListings({ status: 'All', limit: 200 });
+      return res.data?.listings ?? [];
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['waste_listings'] }),
+    staleTime: 1000 * 30, // 30 seconds
   });
 
+  // 2. Add Listing Mutation
+  const addMutation = useMutation({
+    mutationFn: async (input: CreateListingInput) => {
+      // Step A: Client-side validation
+      if (!input.title?.trim()) throw new Error('Listing title is required.');
+      if (!input.waste_type?.trim()) throw new Error('Waste category is required.');
+      if (isNaN(input.quantity) || Number(input.quantity) <= 0) {
+        throw new Error('Quantity must be a positive number greater than 0.');
+      }
+      if (isNaN(input.price_per_kg) || Number(input.price_per_kg) < 0) {
+        throw new Error('Price per kg must be 0 or greater.');
+      }
+      if (!input.location?.trim()) throw new Error('Location is required.');
+
+      // Step B: Send payload to backend /api/listings (using FormData if file is attached)
+      let res;
+      if (input.image) {
+        const formData = new FormData();
+        formData.append('title', input.title.trim());
+        formData.append('waste_type', input.waste_type);
+        formData.append('quantity', String(input.quantity));
+        formData.append('unit', input.unit || 'kg');
+        formData.append('price_per_kg', String(input.price_per_kg));
+        formData.append('location', input.location.trim());
+        if (input.description?.trim()) {
+          formData.append('description', input.description.trim());
+        }
+        formData.append('status', 'Available');
+        formData.append('image', input.image);
+
+        res = await createListing(formData);
+      } else {
+        const payload: CreateListingPayload = {
+          title: input.title.trim(),
+          waste_type: input.waste_type,
+          quantity: Number(input.quantity),
+          unit: input.unit || 'kg',
+          price_per_kg: Number(input.price_per_kg),
+          location: input.location.trim(),
+          description: input.description?.trim() || null,
+          image_url: null,
+          status: 'Available',
+        };
+
+        res = await createListing(payload);
+      }
+      if (!res.success || !res.data?.listing) {
+        throw new Error(res.message || 'Failed to create listing');
+      }
+      return res.data.listing;
+    },
+    onSuccess: () => {
+      // Instantly refresh query cache so listing appears in both Seller Dashboard and Buyer Marketplace
+      queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+    },
+  });
+
+  // 3. Update Listing Mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
-      const { error } = await supabase.from('waste_listings').update(updates).eq('id', id);
-      if (error) throw error;
+      const res = await updateListing(id, updates);
+      if (!res.success || !res.data?.listing) {
+        throw new Error(res.message || 'Failed to update listing');
+      }
+      return res.data.listing;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['waste_listings'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+    },
   });
 
+  // 4. Delete Listing Mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('waste_listings').delete().eq('id', id);
-      if (error) throw error;
+      const res = await deleteListing(id);
+      if (!res.success) {
+        throw new Error(res.message || 'Failed to delete listing');
+      }
+      return true;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['waste_listings'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+    },
   });
 
+  // 5. Filtering helper
   const filterListings = useCallback(
     (filters: ListingFilters): DbWasteListing[] => {
       return listings.filter((listing) => {
@@ -102,8 +146,11 @@ export function useWasteListings() {
             listing.location.toLowerCase().includes(s);
           if (!matchesSearch) return false;
         }
-        if (filters.wasteType && filters.wasteType !== 'All' && listing.waste_type !== filters.wasteType) return false;
-        if (filters.location && filters.location !== 'All' && listing.location !== filters.location) return false;
+        const wt = filters.wasteType || filters.waste_type;
+        if (wt && wt !== 'All' && listing.waste_type !== wt) return false;
+        if (filters.location && filters.location !== 'All' && !listing.location.includes(filters.location)) {
+          return false;
+        }
         if (filters.priceMin !== undefined && listing.price_per_kg < filters.priceMin) return false;
         if (filters.priceMax !== undefined && listing.price_per_kg > filters.priceMax) return false;
         if (filters.status && filters.status !== 'All' && listing.status !== filters.status) return false;
@@ -116,8 +163,11 @@ export function useWasteListings() {
   return {
     listings,
     isLoading,
+    queryError,
+    refetch,
     addListing: addMutation.mutateAsync,
-    updateListing: (id: string, updates: Record<string, unknown>) => updateMutation.mutateAsync({ id, updates }),
+    updateListing: (id: string, updates: Record<string, unknown>) =>
+      updateMutation.mutateAsync({ id, updates }),
     deleteListing: deleteMutation.mutateAsync,
     filterListings,
     isAdding: addMutation.isPending,

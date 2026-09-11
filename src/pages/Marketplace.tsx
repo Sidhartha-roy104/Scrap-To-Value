@@ -1,5 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState, useMemo } from 'react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { 
   Search, 
@@ -7,37 +6,25 @@ import {
   MapPin, 
   Package,
   ChevronDown,
-  ImagePlus,
-  X,
 } from 'lucide-react';
-import { Modal } from '@/components/Modal';
 import { ListingDetailModal } from '@/components/ListingDetailModal';
 import { EditListingModal } from '@/components/EditListingModal';
+import { CreateListingModal } from '@/components/CreateListingModal';
+import { ListingImage } from '@/components/ListingImage';
 import { WasteBadge } from '@/components/WasteBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { ListingCardSkeleton } from '@/components/Skeleton';
-import { Spinner } from '@/components/Spinner';
 import { useWasteListings, ListingFilters, DbWasteListing } from '@/hooks/useWasteListings';
-import { useToastNotification } from '@/components/ToastNotification';
 import { WasteType, formatCurrency, formatRelativeTime } from '@/data/mockData';
 import { SellerRatingBadge } from '@/components/SellerRatingBadge';
 
 const wasteTypes: (WasteType | 'All')[] = ['All', 'Organic', 'Plastic', 'Metal', 'Paper', 'E-waste', 'Textile'];
 const locations = ['All', 'Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Vellore', 'Erode', 'Tirupur'];
 
-interface ListingFormData {
-  wasteType: WasteType;
-  quantity: number;
-  pricePerKg: number;
-  location: string;
-  description: string;
-}
-
 export default function Marketplace() {
-  const { listings, isLoading, filterListings, addListing, isAdding } = useWasteListings();
+  const { listings, isLoading, filterListings } = useWasteListings();
   const { role } = useUserRole();
   const isSeller = role === 'seller';
-  const { addToast } = useToastNotification();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWasteType, setSelectedWasteType] = useState<WasteType | 'All'>('All');
@@ -45,29 +32,6 @@ export default function Marketplace() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedListing, setSelectedListing] = useState<DbWasteListing | null>(null);
   const [editingListing, setEditingListing] = useState<DbWasteListing | null>(null);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ListingFormData>();
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        addToast({ type: 'error', title: 'Image too large', message: 'Maximum file size is 5MB' });
-        return;
-      }
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
-  };
-
-  const clearImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
 
   const filters: ListingFilters = useMemo(() => ({
     search: searchQuery,
@@ -80,32 +44,6 @@ export default function Marketplace() {
     filterListings(filters),
     [filterListings, filters]
   );
-
-  const handleAddListing = async (data: ListingFormData) => {
-    try {
-      await addListing({
-        waste_type: data.wasteType,
-        title: `${data.wasteType} Waste - ${data.quantity}kg`,
-        quantity: data.quantity,
-        unit: 'kg',
-        price_per_kg: data.pricePerKg,
-        total_price: data.quantity * data.pricePerKg,
-        location: data.location,
-        description: data.description,
-        image: imageFile || undefined,
-      });
-      setIsModalOpen(false);
-      reset();
-      clearImage();
-      addToast({
-        type: 'success',
-        title: 'Listing Created',
-        message: 'Your waste listing is now live on the marketplace'
-      });
-    } catch (err: any) {
-      addToast({ type: 'error', title: err.message || 'Failed to create listing' });
-    }
-  };
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -219,16 +157,11 @@ export default function Marketplace() {
               className="card-base overflow-hidden cursor-pointer group"
               onClick={() => setSelectedListing(listing)}
             >
-              {listing.image_url && (
-                <div className="w-full h-40 overflow-hidden">
-                  <img 
-                    src={listing.image_url} 
-                    alt={listing.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                </div>
-              )}
+              <ListingImage
+                src={listing.image_url}
+                alt={listing.title}
+                fallbackCategory={listing.waste_type}
+              />
               <div className="p-5">
                 <div className="flex items-start justify-between mb-3">
                   <WasteBadge type={listing.waste_type as WasteType} />
@@ -266,121 +199,11 @@ export default function Marketplace() {
         </div>
       )}
 
-      {/* Add Listing Modal */}
-      <Modal
+      {/* Create Listing Modal */}
+      <CreateListingModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Post New Listing"
-        size="lg"
-      >
-        <form onSubmit={handleSubmit(handleAddListing)} className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Waste Type</label>
-              <select
-                {...register('wasteType', { required: 'Waste type is required' })}
-                className="input-base"
-              >
-                <option value="">Select type</option>
-                {wasteTypes.filter(t => t !== 'All').map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              {errors.wasteType && <p className="text-xs text-destructive mt-1">{errors.wasteType.message}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Quantity (kg)</label>
-              <input
-                type="number"
-                {...register('quantity', { required: 'Quantity is required', min: { value: 1, message: 'Minimum 1 kg' }, valueAsNumber: true })}
-                placeholder="e.g., 500"
-                className="input-base"
-              />
-              {errors.quantity && <p className="text-xs text-destructive mt-1">{errors.quantity.message}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Price per kg (₹)</label>
-              <input
-                type="number"
-                {...register('pricePerKg', { required: 'Price is required', min: { value: 1, message: 'Minimum ₹1' }, valueAsNumber: true })}
-                placeholder="e.g., 12"
-                className="input-base"
-              />
-              {errors.pricePerKg && <p className="text-xs text-destructive mt-1">{errors.pricePerKg.message}</p>}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1.5">Location</label>
-              <select
-                {...register('location', { required: 'Location is required' })}
-                className="input-base"
-              >
-                <option value="">Select location</option>
-                {locations.filter(l => l !== 'All').map(loc => (
-                  <option key={loc} value={loc}>{loc}</option>
-                ))}
-              </select>
-              {errors.location && <p className="text-xs text-destructive mt-1">{errors.location.message}</p>}
-            </div>
-          </div>
-
-          {/* Image Upload */}
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Image (optional)</label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageSelect}
-              className="hidden"
-            />
-            {imagePreview ? (
-              <div className="relative w-full h-40 rounded-lg overflow-hidden border border-border">
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={clearImage}
-                  className="absolute top-2 right-2 p-1 rounded-full bg-background/80 hover:bg-background text-foreground transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full h-28 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-secondary/30 transition-colors"
-              >
-                <ImagePlus className="h-6 w-6 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Click to upload image</span>
-                <span className="text-xs text-muted-foreground">Max 5MB</span>
-              </button>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Description</label>
-            <textarea
-              {...register('description', { required: 'Description is required' })}
-              rows={3}
-              placeholder="Describe the waste material, its condition, and any special handling requirements..."
-              className="input-base resize-none"
-            />
-            {errors.description && <p className="text-xs text-destructive mt-1">{errors.description.message}</p>}
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={() => setIsModalOpen(false)} className="btn-secondary flex-1">
-              Cancel
-            </button>
-            <button type="submit" disabled={isAdding} className="btn-primary flex-1 gap-2">
-              {isAdding ? (<><Spinner size="sm" />Creating...</>) : 'Create Listing'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      />
 
       {/* Listing Detail Modal */}
       <ListingDetailModal
