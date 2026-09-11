@@ -84,7 +84,6 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
         quantity: Number(data.quantity),
         unit: 'kg',
         price_per_kg: Number(data.pricePerKg),
-        total_price: Number(data.quantity) * Number(data.pricePerKg),
         location: data.location,
         description: data.description?.trim() || '',
         image: imageFile || undefined,
