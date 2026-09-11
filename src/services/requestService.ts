@@ -41,13 +41,19 @@ export interface CollectionRequest {
   delivery_otp?: string | null;
   created_at: string;
   updated_at: string;
+  reservation?: {
+    status: string;
+    reserved_quantity: number;
+  };
   listing?: {
     id: string;
     title: string;
     unit: string;
     image_url?: string | null;
     location?: string | null;
+    total_quantity?: number;
     available_quantity?: number;
+    reserved_quantity?: number;
   };
   buyer?: {
     id: string;

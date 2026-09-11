@@ -178,7 +178,16 @@ export function SellerDashboard() {
                     <span className="text-sm font-medium text-foreground truncate">{listing.title}</span>
                     <WasteBadge type={listing.waste_type as WasteType} size="sm" />
                   </div>
-                  <p className="text-sm text-muted-foreground">{formatNumber(Number(listing.quantity))}kg · {listing.location}</p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap mt-0.5">
+                    <span>Available: <strong className="text-foreground">{formatNumber(Number(listing.available_quantity !== undefined ? listing.available_quantity : listing.quantity))}kg</strong></span>
+                    {Number(listing.reserved_quantity || 0) > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400 font-medium">
+                        ({formatNumber(Number(listing.reserved_quantity))}kg reserved)
+                      </span>
+                    )}
+                    <span>· Total: {formatNumber(Number(listing.quantity))}kg</span>
+                    <span>· {listing.location}</span>
+                  </div>
                 </div>
                 <div className="text-right flex-shrink-0 flex items-center gap-2">
                   <div>

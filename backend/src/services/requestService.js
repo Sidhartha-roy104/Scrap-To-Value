@@ -2,10 +2,12 @@
  * services/requestService.js
  * --------------------------
  * Business logic for collection requests (buyer scrap requests) connected to MySQL.
+ * Integrates atomic inventory reservation, release on cancellation, and fulfillment on delivery.
  */
 
 const crypto = require('crypto');
 const { pool } = require('../config/db');
+const inventoryService = require('./inventoryService');
 
 /**
  * Formats a raw database row into a structured response object.
@@ -38,6 +40,12 @@ function formatRequest(row) {
     delivery_otp: row.delivery_otp ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    reservation: row.reservation_status
+      ? {
+          status: row.reservation_status,
+          reserved_quantity: parseFloat(row.reservation_quantity || row.quantity),
+        }
+      : undefined,
     listing: row.listing_title
       ? {
           id: row.listing_id,
@@ -45,9 +53,15 @@ function formatRequest(row) {
           unit: row.listing_unit || 'kg',
           image_url: row.listing_image_url || null,
           location: row.listing_location || null,
-          available_quantity: row.listing_quantity !== undefined && row.listing_quantity !== null
+          total_quantity: row.listing_quantity !== undefined && row.listing_quantity !== null
             ? parseFloat(row.listing_quantity)
             : undefined,
+          available_quantity: row.listing_available_quantity !== undefined && row.listing_available_quantity !== null
+            ? parseFloat(row.listing_available_quantity)
+            : (row.listing_quantity ? parseFloat(row.listing_quantity) : undefined),
+          reserved_quantity: row.listing_reserved_quantity !== undefined && row.listing_reserved_quantity !== null
+            ? parseFloat(row.listing_reserved_quantity)
+            : 0,
         }
       : undefined,
     buyer: row.buyer_name
@@ -72,7 +86,7 @@ function formatRequest(row) {
 }
 
 /**
- * Creates a new collection request for a scrap listing.
+ * Creates a new collection request for a scrap listing with atomic inventory reservation.
  */
 async function createRequest({
   buyerId,
@@ -88,40 +102,12 @@ async function createRequest({
     throw err;
   }
 
-  // 2. Fetch the listing from MySQL
   if (!listing_id) {
     const err = new Error('listing_id is required.');
     err.code = 'BAD_REQUEST';
     throw err;
   }
 
-  const [listingRows] = await pool.execute(
-    'SELECT * FROM waste_listings WHERE id = ? LIMIT 1',
-    [listing_id]
-  );
-
-  if (listingRows.length === 0) {
-    const err = new Error('Listing not found.');
-    err.code = 'NOT_FOUND';
-    throw err;
-  }
-
-  const listing = listingRows[0];
-
-  if (listing.status !== 'Available') {
-    const err = new Error(`Listing is no longer available (current status: ${listing.status}).`);
-    err.code = 'BAD_REQUEST';
-    throw err;
-  }
-
-  // 3. Prevent buyer from requesting their own listing
-  if (listing.user_id === buyerId) {
-    const err = new Error('You cannot request scrap from your own listing.');
-    err.code = 'FORBIDDEN';
-    throw err;
-  }
-
-  // 4. Validate requested quantity
   const numQty = parseFloat(requested_quantity);
   if (isNaN(numQty) || numQty <= 0) {
     const err = new Error('Requested quantity must be a positive number greater than 0.');
@@ -129,59 +115,111 @@ async function createRequest({
     throw err;
   }
 
-  const availableQty = parseFloat(listing.quantity);
-  if (numQty > availableQty) {
-    const err = new Error(
-      `Requested quantity (${numQty} ${listing.unit || 'kg'}) exceeds available listing quantity (${availableQty} ${listing.unit || 'kg'}).`
+  // 2. Perform listing check and reservation in a managed database transaction
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Row lock the listing
+    const [listingRows] = await connection.execute(
+      'SELECT * FROM waste_listings WHERE id = ? FOR UPDATE',
+      [listing_id]
     );
-    err.code = 'QUANTITY_EXCEEDED';
+
+    if (listingRows.length === 0) {
+      const err = new Error('Listing not found.');
+      err.code = 'NOT_FOUND';
+      throw err;
+    }
+
+    const listing = listingRows[0];
+
+    if (listing.status !== 'Available') {
+      const err = new Error(`Listing is no longer available (current status: ${listing.status}).`);
+      err.code = 'BAD_REQUEST';
+      throw err;
+    }
+
+    if (listing.user_id === buyerId) {
+      const err = new Error('You cannot request scrap from your own listing.');
+      err.code = 'FORBIDDEN';
+      throw err;
+    }
+
+    const availableQty = parseFloat(listing.available_quantity);
+    if (numQty > availableQty) {
+      const err = new Error(
+        `Only ${availableQty} ${listing.unit || 'kg'} is available for this listing.`
+      );
+      err.code = 'INSUFFICIENT_INVENTORY';
+      err.availableQuantity = availableQty;
+      throw err;
+    }
+
+    // 3. Compute trusted financial values
+    const price_per_kg = parseFloat(listing.price_per_kg);
+    const total_amount = parseFloat((numQty * price_per_kg).toFixed(2));
+    const sellerId = listing.user_id;
+    const wasteType = listing.waste_type;
+    const id = crypto.randomUUID();
+
+    // 4. Atomically reserve inventory
+    await inventoryService.reserveInventory({
+      listingId: listing_id,
+      orderId: id,
+      buyerId,
+      sellerId,
+      quantity: numQty,
+      actorId: buyerId,
+      connection,
+    });
+
+    // 5. Insert request record with status "pending"
+    const initialTracking = JSON.stringify([
+      {
+        status: 'pending',
+        timestamp: new Date().toISOString(),
+        note: `Buyer submitted collection request for ${numQty} ${listing.unit || 'kg'}`,
+      },
+    ]);
+
+    const sanitizedMessage = typeof buyer_message === 'string' ? buyer_message.trim() : null;
+
+    const insertQuery = `
+      INSERT INTO collection_requests (
+        id, listing_id, buyer_id, seller_id, waste_type,
+        quantity, price_per_kg, amount, buyer_message,
+        status, tracking_updates
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+    `;
+
+    await connection.execute(insertQuery, [
+      id,
+      listing_id,
+      buyerId,
+      sellerId,
+      wasteType,
+      numQty,
+      price_per_kg,
+      total_amount,
+      sanitizedMessage,
+      initialTracking,
+    ]);
+
+    await connection.commit();
+
+    return getRequestById(id);
+  } catch (err) {
+    await connection.rollback();
     throw err;
+  } finally {
+    connection.release();
   }
-
-  // 5. Compute trusted pricing on backend
-  const price_per_kg = parseFloat(listing.price_per_kg);
-  const total_amount = parseFloat((numQty * price_per_kg).toFixed(2));
-  const sellerId = listing.user_id;
-  const wasteType = listing.waste_type;
-
-  const id = crypto.randomUUID();
-  const initialTracking = JSON.stringify([
-    {
-      status: 'pending',
-      timestamp: new Date().toISOString(),
-      note: 'Buyer submitted collection request',
-    },
-  ]);
-
-  const sanitizedMessage = typeof buyer_message === 'string' ? buyer_message.trim() : null;
-
-  // 6. Insert request record with status "pending"
-  const insertQuery = `
-    INSERT INTO collection_requests (
-      id, listing_id, buyer_id, seller_id, waste_type,
-      quantity, price_per_kg, amount, buyer_message,
-      status, tracking_updates
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
-  `;
-
-  await pool.execute(insertQuery, [
-    id,
-    listing_id,
-    buyerId,
-    sellerId,
-    wasteType,
-    numQty,
-    price_per_kg,
-    total_amount,
-    sanitizedMessage,
-    initialTracking,
-  ]);
-
-  return getRequestById(id);
 }
 
 /**
- * Retrieves a single request by its ID with relational metadata.
+ * Retrieves a single request by its ID with relational metadata and reservation details.
  */
 async function getRequestById(id) {
   const query = `
@@ -191,7 +229,11 @@ async function getRequestById(id) {
       l.unit as listing_unit,
       l.image_url as listing_image_url,
       l.quantity as listing_quantity,
+      l.available_quantity as listing_available_quantity,
+      l.reserved_quantity as listing_reserved_quantity,
       l.location as listing_location,
+      res.status as reservation_status,
+      res.reserved_quantity as reservation_quantity,
       b.display_name as buyer_name,
       b.email as buyer_email,
       b.company_name as buyer_company,
@@ -202,6 +244,7 @@ async function getRequestById(id) {
       s.phone as seller_phone
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
+    LEFT JOIN inventory_reservations res ON r.id = res.order_id
     LEFT JOIN users b ON r.buyer_id = b.id
     LEFT JOIN users s ON r.seller_id = s.id
     WHERE r.id = ?
@@ -263,7 +306,11 @@ async function getRequests({
       l.unit as listing_unit,
       l.image_url as listing_image_url,
       l.quantity as listing_quantity,
+      l.available_quantity as listing_available_quantity,
+      l.reserved_quantity as listing_reserved_quantity,
       l.location as listing_location,
+      res.status as reservation_status,
+      res.reserved_quantity as reservation_quantity,
       b.display_name as buyer_name,
       b.email as buyer_email,
       b.company_name as buyer_company,
@@ -274,6 +321,7 @@ async function getRequests({
       s.phone as seller_phone
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
+    LEFT JOIN inventory_reservations res ON r.id = res.order_id
     LEFT JOIN users b ON r.buyer_id = b.id
     LEFT JOIN users s ON r.seller_id = s.id
     ${whereClause}
@@ -293,7 +341,10 @@ async function getRequests({
 }
 
 /**
- * Updates a request status (e.g., seller confirming, completing, or cancelling).
+ * Updates a request status (e.g., seller confirming, delivering, or cancelling).
+ * Synchronizes inventory reservations accordingly:
+ * - 'cancelled' -> Releases reserved inventory back to available quantity.
+ * - 'delivered' -> Fulfills reserved inventory to fulfilled quantity.
  */
 async function updateRequestStatus(id, userId, { status, note, estimated_delivery = null }) {
   const existing = await getRequestById(id);
@@ -320,7 +371,7 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
     throw err;
   }
 
-  // 2. Status transition validation
+  // 2. Idempotency on exact status
   if (existing.status === status) {
     return existing;
   }
@@ -341,6 +392,24 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
     throw err;
   }
 
+  // 3. Inventory Reservation Transitions
+  if (status === 'cancelled') {
+    // Release reserved inventory back to available stock
+    await inventoryService.releaseInventory({
+      orderId: id,
+      actorId: userId,
+      note: note || `Order cancelled: ${existing.status} -> cancelled`,
+    });
+  } else if (status === 'delivered') {
+    // Mark reserved inventory as fulfilled
+    await inventoryService.fulfillInventory({
+      orderId: id,
+      actorId: userId,
+      note: note || 'Order delivered and fulfilled',
+    });
+  }
+
+  // 4. Update request status & append tracking history
   const currentTracking = Array.isArray(existing.tracking_updates)
     ? existing.tracking_updates
     : [];

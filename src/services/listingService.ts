@@ -18,6 +18,10 @@ export interface DbWasteListing {
   title: string;
   description: string | null;
   quantity: number;
+  total_quantity?: number;
+  available_quantity?: number;
+  reserved_quantity?: number;
+  fulfilled_quantity?: number;
   unit: string;
   price_per_kg: number;
   total_price: number;
@@ -181,3 +185,56 @@ export async function uploadListingImage(
   }
   throw new Error(res.message || 'Failed to upload image');
 }
+
+export interface ListingInventory {
+  listing_id: string;
+  seller_id: string;
+  title: string;
+  waste_type: string;
+  unit: string;
+  total_quantity: number;
+  available_quantity: number;
+  reserved_quantity: number;
+  fulfilled_quantity: number;
+  price_per_kg: number;
+  status: string;
+  is_in_stock: boolean;
+  balanced: boolean;
+}
+
+export interface InventoryHistoryItem {
+  id: string;
+  listing_id: string;
+  order_id: string | null;
+  transaction_type: 'ADDITION' | 'RESERVATION' | 'RELEASE' | 'FULFILLMENT' | 'ADJUSTMENT';
+  quantity: number;
+  previous_available_quantity: number;
+  resulting_available_quantity: number;
+  actor_id: string | null;
+  actor_name: string | null;
+  source: string;
+  note: string | null;
+  created_at: string;
+}
+
+/**
+ * GET /api/inventory/listings/:id
+ * Fetches real-time inventory breakdown for a listing.
+ */
+export async function getListingInventory(
+  listingId: string
+): Promise<ApiResponse<{ inventory: ListingInventory }>> {
+  return apiClient.get<ApiResponse<{ inventory: ListingInventory }>>(`/inventory/listings/${listingId}`);
+}
+
+/**
+ * GET /api/inventory/listings/:id/history
+ * Fetches transaction ledger history for a listing (seller only).
+ */
+export async function getListingInventoryHistory(
+  listingId: string,
+  limit: number = 50
+): Promise<ApiResponse<{ history: InventoryHistoryItem[] }>> {
+  return apiClient.get<ApiResponse<{ history: InventoryHistoryItem[] }>>(`/inventory/listings/${listingId}/history?limit=${limit}`);
+}
+

@@ -20,6 +20,7 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const listingRoutes = require('./routes/listingRoutes');
 const requestRoutes = require('./routes/requestRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.use('/api/auth', authLimiter, authRoutes); // Phase 2 ✅
 app.use('/api/users', userRoutes);
 app.use('/api/listings', listingRoutes); // Scrap listings & marketplace
 app.use('/api/requests', requestRoutes); // Collection requests & buyer orders
+app.use('/api/inventory', inventoryRoutes); // Inventory status & audit history
 
 // Phase 3+ routes (not yet implemented):
 // app.use('/api/dashboard',     require('./routes/dashboardRoutes'));

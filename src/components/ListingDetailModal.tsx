@@ -67,7 +67,10 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
 
   const isOwner = user?.id === listing.user_id;
   const isBuyer = user?.role === 'buyer';
-  const availableQty = Number(listing.quantity);
+  const totalQty = Number(listing.total_quantity !== undefined ? listing.total_quantity : listing.quantity);
+  const availableQty = Number(listing.available_quantity !== undefined ? listing.available_quantity : listing.quantity);
+  const reservedQty = Number(listing.reserved_quantity ?? 0);
+  const isOutOfStock = availableQty <= 0;
   const pricePerKg = Number(listing.price_per_kg);
   const numQty = parseFloat(requestedQuantity) || 0;
   const calculatedTotal = Math.max(0, parseFloat((numQty * pricePerKg).toFixed(2)));
@@ -78,7 +81,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
   if (requestedQuantity !== '' && numQty <= 0) {
     quantityError = 'Quantity must be greater than 0.';
   } else if (numQty > availableQty) {
-    quantityError = `Quantity cannot exceed available ${availableQty} ${listing.unit || 'kg'}.`;
+    quantityError = `Only ${availableQty} ${listing.unit || 'kg'} is available for this listing.`;
   }
 
   const handleClose = () => {
@@ -175,8 +178,12 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-secondary/50 rounded-lg p-3 text-center">
             <Scale className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
-            <p className="text-sm font-semibold text-foreground">{listing.quantity} {listing.unit || 'kg'}</p>
-            <p className="text-xs text-muted-foreground">Available</p>
+            <p className={`text-sm font-semibold ${isOutOfStock ? 'text-destructive' : 'text-foreground'}`}>
+              {availableQty} {listing.unit || 'kg'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {reservedQty > 0 ? `Available (${reservedQty}kg res.)` : 'Available'}
+            </p>
           </div>
           <div className="bg-secondary/50 rounded-lg p-3 text-center">
             <IndianRupee className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
@@ -417,6 +424,10 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                 {listing.status !== 'Available' ? (
                   <button disabled className="btn-secondary opacity-60 cursor-not-allowed">
                     {listing.status}
+                  </button>
+                ) : isOutOfStock ? (
+                  <button disabled className="btn-secondary opacity-70 cursor-not-allowed text-destructive border-destructive/30 bg-destructive/5 font-semibold text-xs px-3 py-2 rounded-lg">
+                    Out of Stock / Fully Reserved
                   </button>
                 ) : user.role === 'seller' ? (
                   <div className="text-xs text-muted-foreground bg-secondary/50 px-3 py-2 rounded-lg text-right">

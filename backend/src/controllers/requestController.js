@@ -15,6 +15,7 @@ function errorToStatus(code) {
     BAD_REQUEST: 400,
     INVALID_QUANTITY: 400,
     QUANTITY_EXCEEDED: 400,
+    INSUFFICIENT_INVENTORY: 400,
   };
   return map[code] || 500;
 }

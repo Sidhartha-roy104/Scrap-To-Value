@@ -720,6 +720,22 @@ function OrderDetailsModal({ request, onClose, onRefresh }: OrderDetailsModalPro
                 <span className="text-muted-foreground">Price per kg:</span>
                 <span className="font-semibold text-foreground">{formatCurrency(request.price_per_kg)}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Inventory Allocation:</span>
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  request.reservation?.status === 'FULFILLED' || request.status === 'delivered'
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : request.reservation?.status === 'RELEASED' || request.status === 'cancelled'
+                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    : 'bg-primary/10 text-primary'
+                }`}>
+                  {request.reservation?.status === 'FULFILLED' || request.status === 'delivered'
+                    ? 'Fulfilled'
+                    : request.reservation?.status === 'RELEASED' || request.status === 'cancelled'
+                    ? 'Released'
+                    : 'Reserved (Committed)'}
+                </span>
+              </div>
               <div className="flex justify-between pt-1 border-t border-border/40 text-sm">
                 <span className="font-medium text-foreground">Total Value:</span>
                 <span className="font-bold text-primary">{formatCurrency(request.amount)}</span>

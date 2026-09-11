@@ -521,13 +521,20 @@ export default function SellerOrders() {
                 <h4 className="text-sm font-semibold text-foreground truncate">
                   {selectedRequest.listing?.title || `${selectedRequest.waste_type} Waste`}
                 </h4>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Available in listing:{' '}
-                  <strong className="text-foreground">
-                    {selectedRequest.listing?.available_quantity !== undefined
-                      ? `${selectedRequest.listing.available_quantity} ${selectedRequest.listing.unit || 'kg'}`
-                      : 'N/A'}
-                  </strong>
+                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span>
+                    Available in listing:{' '}
+                    <strong className="text-foreground">
+                      {selectedRequest.listing?.available_quantity !== undefined
+                        ? `${selectedRequest.listing.available_quantity} ${selectedRequest.listing.unit || 'kg'}`
+                        : 'N/A'}
+                    </strong>
+                  </span>
+                  {selectedRequest.listing?.reserved_quantity !== undefined && Number(selectedRequest.listing.reserved_quantity) > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400 font-medium">
+                      ({selectedRequest.listing.reserved_quantity} {selectedRequest.listing.unit || 'kg'} reserved)
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

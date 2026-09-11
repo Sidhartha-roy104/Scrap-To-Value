@@ -7,6 +7,8 @@
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 
+const inventoryService = require('./inventoryService');
+
 function resolveImageUrl(imageUrl, customBaseUrl) {
   if (!imageUrl || typeof imageUrl !== 'string') return null;
   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:')) {
@@ -24,13 +26,28 @@ function resolveImageUrl(imageUrl, customBaseUrl) {
  * Maps a raw MySQL row to a clean response object.
  */
 function formatListing(row, customBaseUrl) {
+  const total = parseFloat(row.quantity);
+  const available = row.available_quantity !== undefined && row.available_quantity !== null
+    ? parseFloat(row.available_quantity)
+    : total;
+  const reserved = row.reserved_quantity !== undefined && row.reserved_quantity !== null
+    ? parseFloat(row.reserved_quantity)
+    : 0;
+  const fulfilled = row.fulfilled_quantity !== undefined && row.fulfilled_quantity !== null
+    ? parseFloat(row.fulfilled_quantity)
+    : 0;
+
   return {
     id: row.id,
     user_id: row.user_id,
     waste_type: row.waste_type,
     title: row.title,
     description: row.description ?? null,
-    quantity: parseFloat(row.quantity),
+    quantity: total,
+    total_quantity: total,
+    available_quantity: available,
+    reserved_quantity: reserved,
+    fulfilled_quantity: fulfilled,
     unit: row.unit ?? 'kg',
     price_per_kg: parseFloat(row.price_per_kg),
     total_price: parseFloat(row.total_price),
@@ -73,9 +90,10 @@ async function createListing({
   const query = `
     INSERT INTO waste_listings (
       id, user_id, waste_type, title, description,
-      quantity, unit, price_per_kg, total_price,
+      quantity, available_quantity, reserved_quantity, fulfilled_quantity,
+      unit, price_per_kg, total_price,
       location, image_url, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await pool.execute(query, [
@@ -85,6 +103,9 @@ async function createListing({
     title,
     description,
     numQty,
+    numQty, // available_quantity = initial total
+    0.00,   // reserved_quantity
+    0.00,   // fulfilled_quantity
     unit,
     numPrice,
     total_price,
@@ -92,6 +113,14 @@ async function createListing({
     image_url,
     status,
   ]);
+
+  // Log ledger transaction for initial stock addition
+  await inventoryService.logListingCreation({
+    listingId: id,
+    quantity: numQty,
+    actorId: userId,
+    unit,
+  });
 
   return getListingById(id);
 }
