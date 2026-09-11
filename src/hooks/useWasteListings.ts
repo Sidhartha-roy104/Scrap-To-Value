@@ -26,6 +26,7 @@ export interface CreateListingInput {
   quantity: number;
   unit?: string;
   price_per_kg: number;
+  total_price?: number;
   location: string;
   description: string;
   image?: File;
