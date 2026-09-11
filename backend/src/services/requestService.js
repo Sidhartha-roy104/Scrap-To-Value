@@ -46,6 +46,15 @@ function formatRequest(row) {
           reserved_quantity: parseFloat(row.reservation_quantity || row.quantity),
         }
       : undefined,
+    payment: row.payment_status
+      ? {
+          id: row.payment_id,
+          status: row.payment_status,
+          amount: parseFloat(row.payment_amount || row.amount),
+          payment_method: row.payment_method || null,
+          paid_at: row.payment_paid_at || null,
+        }
+      : undefined,
     listing: row.listing_title
       ? {
           id: row.listing_id,
@@ -234,6 +243,11 @@ async function getRequestById(id) {
       l.location as listing_location,
       res.status as reservation_status,
       res.reserved_quantity as reservation_quantity,
+      p.id as payment_id,
+      p.status as payment_status,
+      p.amount as payment_amount,
+      p.payment_method as payment_method,
+      p.paid_at as payment_paid_at,
       b.display_name as buyer_name,
       b.email as buyer_email,
       b.company_name as buyer_company,
@@ -245,6 +259,9 @@ async function getRequestById(id) {
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
     LEFT JOIN inventory_reservations res ON r.id = res.order_id
+    LEFT JOIN payments p ON p.id = (
+      SELECT id FROM payments WHERE request_id = r.id ORDER BY created_at DESC LIMIT 1
+    )
     LEFT JOIN users b ON r.buyer_id = b.id
     LEFT JOIN users s ON r.seller_id = s.id
     WHERE r.id = ?
@@ -311,6 +328,11 @@ async function getRequests({
       l.location as listing_location,
       res.status as reservation_status,
       res.reserved_quantity as reservation_quantity,
+      p.id as payment_id,
+      p.status as payment_status,
+      p.amount as payment_amount,
+      p.payment_method as payment_method,
+      p.paid_at as payment_paid_at,
       b.display_name as buyer_name,
       b.email as buyer_email,
       b.company_name as buyer_company,
@@ -322,6 +344,9 @@ async function getRequests({
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
     LEFT JOIN inventory_reservations res ON r.id = res.order_id
+    LEFT JOIN payments p ON p.id = (
+      SELECT id FROM payments WHERE request_id = r.id ORDER BY created_at DESC LIMIT 1
+    )
     LEFT JOIN users b ON r.buyer_id = b.id
     LEFT JOIN users s ON r.seller_id = s.id
     ${whereClause}

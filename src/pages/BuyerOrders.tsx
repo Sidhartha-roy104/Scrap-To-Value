@@ -29,11 +29,13 @@ import {
   MapPin,
   ArrowRight,
   ShieldCheck,
+  CreditCard,
 } from 'lucide-react';
 import { WasteBadge } from '@/components/WasteBadge';
 import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/data/mockData';
 import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
+import { MockCheckoutModal } from '@/components/MockCheckoutModal';
 
 type StatusFilter = 'All' | 'pending' | 'confirmed' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
@@ -94,6 +96,45 @@ export function getStatusBadge(status: RequestStatus) {
   }
 }
 
+export function getPaymentBadge(payment?: CollectionRequest['payment'], orderStatus?: RequestStatus) {
+  if (payment?.status === 'SUCCEEDED' || (orderStatus && ['confirmed', 'in_transit', 'delivered'].includes(orderStatus) && payment?.status !== 'FAILED')) {
+    return {
+      label: 'Paid',
+      className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+      icon: CheckCircle2,
+    };
+  }
+  if (payment?.status === 'FAILED') {
+    return {
+      label: 'Payment Failed',
+      className: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+      icon: XCircle,
+    };
+  }
+  if (payment?.status === 'CANCELLED') {
+    return {
+      label: 'Payment Cancelled',
+      className: 'bg-muted text-muted-foreground border-border',
+      icon: XCircle,
+    };
+  }
+  if (payment?.status === 'REFUNDED') {
+    return {
+      label: 'Refunded',
+      className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+      icon: AlertTriangle,
+    };
+  }
+  if (orderStatus === 'pending') {
+    return {
+      label: 'Payment Pending',
+      className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+      icon: Clock,
+    };
+  }
+  return null;
+}
+
 // Visual tracking steps
 const TRACKING_STEPS: { key: RequestStatus; label: string; icon: typeof Clock }[] = [
   { key: 'pending', label: 'Pending Approval', icon: Clock },
@@ -122,6 +163,7 @@ export default function BuyerOrders() {
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<CollectionRequest | null>(null);
+  const [paymentTargetRequest, setPaymentTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Fetch buyer requests from backend
   const {
@@ -405,6 +447,8 @@ export default function BuyerOrders() {
           {filteredRequests.map(req => {
             const badge = getStatusBadge(req.status);
             const StatusIcon = badge.icon;
+            const paymentBadge = getPaymentBadge(req.payment, req.status);
+            const isPayable = req.status === 'pending' && req.payment?.status !== 'SUCCEEDED';
             const listingTitle = req.listing?.title || `${req.waste_type} Scrap`;
             const sellerName = req.seller?.name || 'Seller';
             const sellerCompany = req.seller?.company;
@@ -428,12 +472,22 @@ export default function BuyerOrders() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <WasteBadge type={req.waste_type as WasteType} size="sm" />
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badge.className}`}
-                        >
-                          <StatusIcon className="h-3 w-3" />
-                          <span>{badge.label}</span>
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          {paymentBadge && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${paymentBadge.className}`}
+                            >
+                              <paymentBadge.icon className="h-3 w-3" />
+                              <span>{paymentBadge.label}</span>
+                            </span>
+                          )}
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${badge.className}`}
+                          >
+                            <StatusIcon className="h-3 w-3" />
+                            <span>{badge.label}</span>
+                          </span>
+                        </div>
                       </div>
                       <h3
                         className="font-semibold text-foreground text-base line-clamp-1 group-hover:text-primary transition-colors"
@@ -502,11 +556,11 @@ export default function BuyerOrders() {
 
                 {/* Card Action Footer */}
                 <div className="p-4 border-t border-border/80 bg-secondary/15 flex items-center justify-between gap-3">
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[180px]">
                     {req.status === 'pending'
-                      ? 'Waiting for seller response'
+                      ? (req.payment?.status === 'SUCCEEDED' ? 'Payment confirmed' : 'Payment pending')
                       : req.status === 'confirmed'
-                      ? 'Seller accepted your order'
+                      ? 'Confirmed & reserved'
                       : req.status === 'in_transit'
                       ? 'Order is on its way'
                       : req.status === 'delivered'
@@ -514,13 +568,24 @@ export default function BuyerOrders() {
                       : 'Order finalized'}
                   </span>
 
-                  <button
-                    onClick={() => setSelectedRequest(req)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>View Details</span>
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isPayable && (
+                      <button
+                        onClick={() => setPaymentTargetRequest(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors"
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        <span>Pay Now</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setSelectedRequest(req)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>View Details</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -534,6 +599,22 @@ export default function BuyerOrders() {
           request={activeSelectedRequest}
           onClose={() => setSelectedRequest(null)}
           onRefresh={handleManualRefresh}
+          onPayNow={(target) => {
+            setSelectedRequest(null);
+            setPaymentTargetRequest(target);
+          }}
+        />
+      )}
+
+      {/* Mock Payment Checkout Dialog */}
+      {paymentTargetRequest && (
+        <MockCheckoutModal
+          isOpen={!!paymentTargetRequest}
+          onClose={() => setPaymentTargetRequest(null)}
+          request={paymentTargetRequest}
+          onPaymentComplete={() => {
+            handleManualRefresh();
+          }}
         />
       )}
     </div>
@@ -547,11 +628,14 @@ interface OrderDetailsModalProps {
   request: CollectionRequest;
   onClose: () => void;
   onRefresh: () => void;
+  onPayNow?: (request: CollectionRequest) => void;
 }
 
-function OrderDetailsModal({ request, onClose, onRefresh }: OrderDetailsModalProps) {
+function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetailsModalProps) {
   const badge = getStatusBadge(request.status);
   const StatusIcon = badge.icon;
+  const paymentBadge = getPaymentBadge(request.payment, request.status);
+  const isPayable = request.status === 'pending' && request.payment?.status !== 'SUCCEEDED';
   const currentStep = getTrackingStepIndex(request.status);
 
   const listingTitle = request.listing?.title || `${request.waste_type} Scrap`;
@@ -781,6 +865,62 @@ function OrderDetailsModal({ request, onClose, onRefresh }: OrderDetailsModalPro
           </div>
         </div>
 
+        {/* Payment & Settlement Summary Box */}
+        <div className="card-base p-4 bg-secondary/15 space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <CreditCard className="h-3.5 w-3.5" />
+              Payment & Settlement Status
+            </h4>
+            {paymentBadge && (
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${paymentBadge.className}`}>
+                <paymentBadge.icon className="h-3 w-3" />
+                <span>{paymentBadge.label}</span>
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className="bg-card p-2.5 rounded-lg border border-border/50">
+              <p className="text-muted-foreground">Order Amount</p>
+              <p className="font-bold text-foreground text-sm mt-0.5">{formatCurrency(request.amount)}</p>
+            </div>
+            <div className="bg-card p-2.5 rounded-lg border border-border/50">
+              <p className="text-muted-foreground">Gateway / Mode</p>
+              <p className="font-semibold text-foreground mt-0.5 flex items-center gap-1">
+                <span>Mock Gateway</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono">
+                  Test Mode
+                </span>
+              </p>
+            </div>
+            <div className="bg-card p-2.5 rounded-lg border border-border/50">
+              <p className="text-muted-foreground">Payment ID</p>
+              <p className="font-mono text-foreground truncate mt-0.5" title={request.payment?.id || 'Unpaid'}>
+                {request.payment?.id ? request.payment.id.slice(0, 14) + '...' : 'Not initiated'}
+              </p>
+            </div>
+          </div>
+
+          {isPayable && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="text-xs">
+                <p className="font-semibold text-emerald-800 dark:text-emerald-300">Payment Pending</p>
+                <p className="text-muted-foreground mt-0.5">
+                  Complete mock payment of {formatCurrency(request.amount)} to confirm your scrap order.
+                </p>
+              </div>
+              <button
+                onClick={() => onPayNow?.(request)}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow transition-colors flex-shrink-0"
+              >
+                <CreditCard className="h-4 w-4" />
+                <span>Pay Now ({formatCurrency(request.amount)})</span>
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Buyer Message if present */}
         {request.buyer_message && (
           <div className="card-base p-4 bg-secondary/15 space-y-1.5">
@@ -836,6 +976,15 @@ function OrderDetailsModal({ request, onClose, onRefresh }: OrderDetailsModalPro
           </div>
 
           <div className="flex items-center gap-3">
+            {isPayable && (
+              <button
+                onClick={() => onPayNow?.(request)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Pay Now</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 onRefresh();

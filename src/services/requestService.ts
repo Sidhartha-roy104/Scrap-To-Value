@@ -45,6 +45,13 @@ export interface CollectionRequest {
     status: string;
     reserved_quantity: number;
   };
+  payment?: {
+    id: string;
+    status: 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'REFUND_PENDING' | 'REFUNDED';
+    amount: number;
+    payment_method?: string | null;
+    paid_at?: string | null;
+  };
   listing?: {
     id: string;
     title: string;
