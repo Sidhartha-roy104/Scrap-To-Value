@@ -25,8 +25,8 @@ const createListingRules = [
 
   body('title')
     .trim()
-    .notEmpty().withMessage('Listing title is required')
-    .isLength({ min: 3, max: 255 }).withMessage('Title must be between 3 and 255 characters'),
+    .notEmpty().withMessage('Scrap material name is required')
+    .isLength({ min: 3, max: 150 }).withMessage('Scrap material name must be between 3 and 150 characters'),
 
   body('description')
     .optional({ nullable: true })
@@ -46,9 +46,36 @@ const createListingRules = [
     .isFloat({ min: 0 }).withMessage('Price per kg must be 0 or greater'),
 
   body('location')
+    .optional({ nullable: true })
+    .custom((val, { req }) => {
+      const loc = (val && typeof val === 'string') ? val.trim() : '';
+      const state = (req.body.state && typeof req.body.state === 'string') ? req.body.state.trim() : '';
+      const city = (req.body.city && typeof req.body.city === 'string') ? req.body.city.trim() : '';
+      if (!loc && (!state || !city)) {
+        throw new Error('Facility location is required (provide location or city and state)');
+      }
+      return true;
+    }),
+
+  body('country')
+    .optional({ nullable: true })
     .trim()
-    .notEmpty().withMessage('Location is required')
-    .isLength({ min: 2, max: 255 }).withMessage('Location must be between 2 and 255 characters'),
+    .isLength({ max: 100 }).withMessage('Country must not exceed 100 characters'),
+
+  body('state')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('State must not exceed 100 characters'),
+
+  body('district')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('District must not exceed 100 characters'),
+
+  body('city')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('City must not exceed 100 characters'),
 
   body('image_url')
     .optional({ nullable: true })
@@ -106,7 +133,7 @@ const updateListingRules = [
   body('title')
     .optional()
     .trim()
-    .isLength({ min: 3, max: 255 }).withMessage('Title must be between 3 and 255 characters'),
+    .isLength({ min: 3, max: 150 }).withMessage('Scrap material name must be between 3 and 150 characters'),
 
   body('description')
     .optional({ nullable: true })
@@ -126,9 +153,29 @@ const updateListingRules = [
     .isFloat({ min: 0 }).withMessage('Price per kg must be 0 or greater'),
 
   body('location')
-    .optional()
+    .optional({ nullable: true })
     .trim()
     .isLength({ min: 2, max: 255 }).withMessage('Location must be between 2 and 255 characters'),
+
+  body('country')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('Country must not exceed 100 characters'),
+
+  body('state')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('State must not exceed 100 characters'),
+
+  body('district')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('District must not exceed 100 characters'),
+
+  body('city')
+    .optional({ nullable: true })
+    .trim()
+    .isLength({ max: 100 }).withMessage('City must not exceed 100 characters'),
 
   body('image_url')
     .optional({ nullable: true })

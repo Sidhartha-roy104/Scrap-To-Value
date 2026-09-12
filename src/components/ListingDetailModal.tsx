@@ -207,9 +207,11 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
             <p className="text-sm font-semibold text-foreground">{formatCurrency(pricePerKg)}</p>
             <p className="text-xs text-muted-foreground">Per kg</p>
           </div>
-          <div className="bg-secondary/50 rounded-lg p-3 text-center">
+          <div className="bg-secondary/50 rounded-lg p-3 text-center min-w-0">
             <MapPin className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
-            <p className="text-sm font-semibold text-foreground">{listing.location}</p>
+            <p className="text-sm font-semibold text-foreground truncate" title={listing.location}>
+              {listing.city && listing.state ? `${listing.city}, ${listing.state}` : listing.location}
+            </p>
             <p className="text-xs text-muted-foreground">Location</p>
           </div>
           <div className="bg-secondary/50 rounded-lg p-3 text-center">

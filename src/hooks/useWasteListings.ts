@@ -28,6 +28,10 @@ export interface CreateListingInput {
   price_per_kg: number;
   total_price?: number;
   location: string;
+  country?: string | null;
+  state?: string | null;
+  district?: string | null;
+  city?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   description: string;
@@ -56,7 +60,7 @@ export function useWasteListings() {
   const addMutation = useMutation({
     mutationFn: async (input: CreateListingInput) => {
       // Step A: Client-side validation
-      if (!input.title?.trim()) throw new Error('Listing title is required.');
+      if (!input.title?.trim()) throw new Error('Scrap material name is required.');
       if (!input.waste_type?.trim()) throw new Error('Waste category is required.');
       if (isNaN(input.quantity) || Number(input.quantity) <= 0) {
         throw new Error('Quantity must be a positive number greater than 0.');
@@ -64,7 +68,9 @@ export function useWasteListings() {
       if (isNaN(input.price_per_kg) || Number(input.price_per_kg) < 0) {
         throw new Error('Price per kg must be 0 or greater.');
       }
-      if (!input.location?.trim()) throw new Error('Location is required.');
+      if (!input.location?.trim() && (!input.city?.trim() || !input.state?.trim())) {
+        throw new Error('Facility location is required.');
+      }
 
       // Step B: Send payload to backend /api/listings (using FormData if file is attached)
       let res;
@@ -76,6 +82,10 @@ export function useWasteListings() {
         formData.append('unit', input.unit || 'kg');
         formData.append('price_per_kg', String(input.price_per_kg));
         formData.append('location', input.location.trim());
+        if (input.country?.trim()) formData.append('country', input.country.trim());
+        if (input.state?.trim()) formData.append('state', input.state.trim());
+        if (input.district?.trim()) formData.append('district', input.district.trim());
+        if (input.city?.trim()) formData.append('city', input.city.trim());
         if (input.latitude !== undefined && input.latitude !== null) {
           formData.append('latitude', String(input.latitude));
         }
@@ -97,6 +107,10 @@ export function useWasteListings() {
           unit: input.unit || 'kg',
           price_per_kg: Number(input.price_per_kg),
           location: input.location.trim(),
+          country: input.country?.trim() || 'India',
+          state: input.state?.trim() || null,
+          district: input.district?.trim() || null,
+          city: input.city?.trim() || null,
           latitude: input.latitude !== undefined ? input.latitude : null,
           longitude: input.longitude !== undefined ? input.longitude : null,
           description: input.description?.trim() || null,

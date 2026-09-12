@@ -52,6 +52,10 @@ function formatListing(row, customBaseUrl) {
     price_per_kg: parseFloat(row.price_per_kg),
     total_price: parseFloat(row.total_price),
     location: row.location,
+    country: row.country ?? 'India',
+    state: row.state ?? null,
+    district: row.district ?? null,
+    city: row.city ?? null,
     latitude: row.latitude !== null && row.latitude !== undefined ? parseFloat(row.latitude) : null,
     longitude: row.longitude !== null && row.longitude !== undefined ? parseFloat(row.longitude) : null,
     image_url: resolveImageUrl(row.image_url, customBaseUrl),
@@ -87,6 +91,10 @@ async function createListing({
   unit = 'kg',
   price_per_kg,
   location,
+  country = 'India',
+  state = null,
+  district = null,
+  city = null,
   latitude = null,
   longitude = null,
   image_url = null,
@@ -99,13 +107,24 @@ async function createListing({
   const parsedLat = (latitude !== undefined && latitude !== null && latitude !== '') ? parseFloat(latitude) : null;
   const parsedLng = (longitude !== undefined && longitude !== null && longitude !== '') ? parseFloat(longitude) : null;
 
+  let computedLocation = location;
+  if (!computedLocation || !computedLocation.trim()) {
+    const parts = [];
+    if (city && city.trim()) parts.push(city.trim());
+    if (district && district.trim() && district.trim() !== city?.trim()) parts.push(district.trim());
+    if (state && state.trim()) parts.push(state.trim());
+    if (country && country.trim()) parts.push(country.trim());
+    computedLocation = parts.join(', ') || 'Unspecified';
+  }
+
   const query = `
     INSERT INTO waste_listings (
       id, user_id, waste_type, title, description,
       quantity, available_quantity, reserved_quantity, fulfilled_quantity,
       unit, price_per_kg, total_price,
-      location, latitude, longitude, image_url, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      location, country, state, district, city,
+      latitude, longitude, image_url, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await pool.execute(query, [
@@ -121,7 +140,11 @@ async function createListing({
     unit,
     numPrice,
     total_price,
-    location,
+    computedLocation,
+    country || 'India',
+    state || null,
+    district || null,
+    city || null,
     parsedLat,
     parsedLng,
     image_url,
@@ -315,6 +338,10 @@ async function updateListing(id, userId, updates) {
     'unit',
     'price_per_kg',
     'location',
+    'country',
+    'state',
+    'district',
+    'city',
     'latitude',
     'longitude',
     'image_url',
@@ -335,6 +362,30 @@ async function updateListing(id, userId, updates) {
       } else {
         params.push(updates[field]);
       }
+    }
+  }
+
+  // If structured fields changed but location was not explicitly provided, update location string
+  if (
+    (updates.city !== undefined || updates.district !== undefined || updates.state !== undefined || updates.country !== undefined) &&
+    updates.location === undefined
+  ) {
+    const finalCity = updates.city !== undefined ? updates.city : existing.city;
+    const finalDistrict = updates.district !== undefined ? updates.district : existing.district;
+    const finalState = updates.state !== undefined ? updates.state : existing.state;
+    const finalCountry = updates.country !== undefined ? updates.country : (existing.country || 'India');
+
+    const parts = [];
+    if (finalCity && String(finalCity).trim()) parts.push(String(finalCity).trim());
+    if (finalDistrict && String(finalDistrict).trim() && String(finalDistrict).trim() !== String(finalCity).trim()) {
+      parts.push(String(finalDistrict).trim());
+    }
+    if (finalState && String(finalState).trim()) parts.push(String(finalState).trim());
+    if (finalCountry && String(finalCountry).trim()) parts.push(String(finalCountry).trim());
+
+    if (parts.length > 0) {
+      setClauses.push('location = ?');
+      params.push(parts.join(', '));
     }
   }
 

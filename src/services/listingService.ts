@@ -26,6 +26,10 @@ export interface DbWasteListing {
   price_per_kg: number;
   total_price: number;
   location: string;
+  country?: string | null;
+  state?: string | null;
+  district?: string | null;
+  city?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   image_url: string | null;
@@ -49,6 +53,10 @@ export interface CreateListingPayload {
   price_per_kg: number;
   total_price?: number;
   location: string;
+  country?: string | null;
+  state?: string | null;
+  district?: string | null;
+  city?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   image_url?: string | null;
