@@ -24,6 +24,8 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const disputeRoutes = require('./routes/disputeRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 
 const app = express();
 
@@ -124,6 +126,8 @@ app.use('/api/inventory', inventoryRoutes); // Inventory status & audit history
 app.use('/api/payments', paymentRoutes);   // Mock payments & order confirmation
 app.use('/api/admin', adminRoutes);         // Phase 7: Admin operations & metrics
 app.use('/api/disputes', disputeRoutes);   // Phase 7: Dispute management & resolution
+app.use('/api/notifications', notificationRoutes); // Phase 8: Notifications & alerts
+app.use('/api/reviews', reviewRoutes);             // Phase 9: Reviews, Ratings & Trust System
 
 // ---------------------------------------------------------------------------
 // 404 Handler

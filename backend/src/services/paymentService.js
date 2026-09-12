@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const paymentProviderService = require('./paymentProviderService');
+const notificationService = require('./notificationService');
 
 /**
  * Maps a raw payments row to a clean API response object.
@@ -342,6 +343,33 @@ async function processMockSuccess({
 
     await connection.commit();
 
+    // Trigger non-blocking notifications
+    notificationService.createNotification({
+      recipientId: buyerId,
+      type: notificationService.NotificationTypes.PAYMENT_SUCCEEDED,
+      title: 'Payment Confirmed',
+      message: `Your payment of ₹${payment.amount} succeeded. Order #${payment.request_id.slice(0, 8).toUpperCase()} is now confirmed.`,
+      relatedRequestId: payment.request_id,
+      relatedEntityType: 'order',
+      relatedEntityId: payment.request_id,
+      link: '/orders',
+      dedupKey: `payment:SUCCEEDED_BUYER:${payment.id}`,
+    });
+
+    if (payment.seller_id) {
+      notificationService.createNotification({
+        recipientId: payment.seller_id,
+        type: notificationService.NotificationTypes.ORDER_CONFIRMED,
+        title: 'Payment Received — Prepare Fulfillment',
+        message: `Buyer completed payment of ₹${payment.amount} for Order #${payment.request_id.slice(0, 8).toUpperCase()}. You may now prepare the scrap for pickup.`,
+        relatedRequestId: payment.request_id,
+        relatedEntityType: 'order',
+        relatedEntityId: payment.request_id,
+        link: '/orders',
+        dedupKey: `payment:CONFIRMED_SELLER:${payment.id}`,
+      });
+    }
+
     const [updatedPayment] = await pool.execute(
       'SELECT * FROM payments WHERE id = ? LIMIT 1',
       [payment.id]
@@ -445,6 +473,19 @@ async function processMockFailure({
     );
 
     await connection.commit();
+
+    // Trigger non-blocking notification to buyer
+    notificationService.createNotification({
+      recipientId: buyerId,
+      type: notificationService.NotificationTypes.PAYMENT_FAILED,
+      title: 'Payment Attempt Failed',
+      message: `Payment of ₹${payment.amount} for Order #${payment.request_id.slice(0, 8).toUpperCase()} failed: ${reason}. Please retry your payment.`,
+      relatedRequestId: payment.request_id,
+      relatedEntityType: 'order',
+      relatedEntityId: payment.request_id,
+      link: '/orders',
+      dedupKey: `payment:FAILED:${payment.id}`,
+    });
 
     const [updatedPayment] = await pool.execute(
       'SELECT * FROM payments WHERE id = ? LIMIT 1',

@@ -178,7 +178,7 @@ export default function Marketplace() {
                   {listing.description}
                 </p>
               
-              <div className="flex items-center justify-between pt-3 border-t border-border">
+              <div className="flex items-center justify-between pt-3 border-t border-border gap-2">
                 <div>
                   <p className="text-lg font-bold text-foreground">
                     {formatCurrency(listing.price_per_kg)}<span className="text-sm font-normal text-muted-foreground">/kg</span>
@@ -187,11 +187,20 @@ export default function Marketplace() {
                     Total: {formatCurrency(listing.total_price)}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
-                  {listing.location}
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span className="truncate max-w-[120px]">{listing.location}</span>
+                  </div>
+                  <SellerRatingBadge
+                    sellerId={listing.user_id}
+                    initialRating={(listing.seller as any)?.avg_rating !== undefined ? {
+                      avg_rating: (listing.seller as any).avg_rating,
+                      total_ratings: (listing.seller as any).total_ratings,
+                    } : undefined}
+                    showEmpty
+                  />
                 </div>
-                <SellerRatingBadge sellerId={listing.user_id} />
               </div>
               </div>
             </div>

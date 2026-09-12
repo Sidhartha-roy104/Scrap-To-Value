@@ -29,11 +29,21 @@ import {
   ChevronRight,
   Sparkles,
   ExternalLink,
+  Bell,
+  CheckCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAdminStats } from '@/services/adminService';
+import {
+  getNotifications,
+  markAsRead as apiMarkAsRead,
+  markAllAsRead as apiMarkAllAsRead,
+  type AppNotification,
+} from '@/services/notificationService';
+import { formatRelativeTime } from '@/data/mockData';
 
 interface NavItem {
   path: string;
@@ -83,11 +93,13 @@ const ADMIN_NAVIGATION: NavGroup[] = [
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
 
-  // Quick platform badges (open disputes count)
+  // Quick platform badges (open disputes count, unverified sellers)
   const { data: statsData } = useQuery({
     queryKey: ['admin_quick_stats'],
     queryFn: async () => {
@@ -98,6 +110,39 @@ export function AdminLayout() {
   });
 
   const openDisputesCount = statsData?.disputes?.open ?? 0;
+  const pendingKycCount = statsData?.users?.inactive ?? 0;
+
+  // Real-time admin operational alerts
+  const { data: notifData } = useQuery({
+    queryKey: ['admin_alerts'],
+    queryFn: async () => {
+      const res = await getNotifications({ limit: 10 });
+      return res.data;
+    },
+    staleTime: 1000 * 15,
+    refetchInterval: 1000 * 20,
+  });
+
+  const adminNotifications = notifData?.notifications ?? [];
+  const adminUnreadCount = notifData?.unreadCount ?? 0;
+
+  const markAdminReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiMarkAsRead(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_alerts'] });
+    },
+  });
+
+  const markAllAdminReadMutation = useMutation({
+    mutationFn: async () => {
+      await apiMarkAllAsRead();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_alerts'] });
+    },
+  });
 
   const handleLogout = async () => {
     await signOut();
@@ -325,6 +370,131 @@ export function AdminLayout() {
               <span>Marketplace</span>
               <ExternalLink className="h-3 w-3" />
             </Link>
+
+            {/* Operational Alerts Bell */}
+            <div className="relative">
+              <button
+                onClick={() => setAlertsOpen(!alertsOpen)}
+                className="relative p-2 rounded-lg hover:bg-secondary/70 text-muted-foreground hover:text-foreground transition-colors focus:outline-hidden"
+                title="Operational Alerts"
+              >
+                <Bell className="h-4 w-4" />
+                {(adminUnreadCount > 0 || openDisputesCount > 0 || pendingKycCount > 0) && (
+                  <span className="absolute top-1 right-1 h-3.5 w-3.5 rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center animate-pulse">
+                    {adminUnreadCount > 9 ? '9+' : adminUnreadCount || '!'}
+                  </span>
+                )}
+              </button>
+
+              {alertsOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setAlertsOpen(false)} />
+                  <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-card border border-border shadow-2xl p-0 z-40 animate-scale-in text-xs overflow-hidden">
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-border/70 bg-secondary/30 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground">Operational Alerts</span>
+                        {adminUnreadCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500 text-[10px] font-bold border border-rose-500/20">
+                            {adminUnreadCount} unread
+                          </span>
+                        )}
+                      </div>
+                      {adminUnreadCount > 0 && (
+                        <button
+                          onClick={() => markAllAdminReadMutation.mutate()}
+                          disabled={markAllAdminReadMutation.isPending}
+                          className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                          title="Mark all as read"
+                        >
+                          <CheckCheck className="h-3.5 w-3.5" />
+                          <span>Mark Read</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Operational Quick Status Chips */}
+                    <div className="p-3 border-b border-border/50 bg-secondary/10 flex items-center gap-2 flex-wrap">
+                      {openDisputesCount > 0 && (
+                        <Link
+                          to="/admin/disputes"
+                          onClick={() => setAlertsOpen(false)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-rose-500/10 text-rose-500 border border-rose-500/20 hover:bg-rose-500/20 transition-colors font-medium text-[11px]"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>{openDisputesCount} Open Disputes</span>
+                        </Link>
+                      )}
+                      {pendingKycCount > 0 && (
+                        <Link
+                          to="/admin/sellers"
+                          onClick={() => setAlertsOpen(false)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-medium text-[11px]"
+                        >
+                          <ShieldAlert className="h-3 w-3" />
+                          <span>{pendingKycCount} Pending KYC</span>
+                        </Link>
+                      )}
+                      <Link
+                        to="/admin/fulfillment"
+                        onClick={() => setAlertsOpen(false)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/10 text-blue-500 border border-blue-500/20 hover:bg-blue-500/20 transition-colors font-medium text-[11px]"
+                      >
+                        <Truck className="h-3 w-3" />
+                        <span>Fulfillment Pipeline</span>
+                      </Link>
+                      <Link
+                        to="/admin/payments"
+                        onClick={() => setAlertsOpen(false)}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors font-medium text-[11px]"
+                      >
+                        <CreditCard className="h-3 w-3" />
+                        <span>Payments</span>
+                      </Link>
+                    </div>
+
+                    {/* Live Alerts List */}
+                    <div className="max-h-72 overflow-y-auto divide-y divide-border/50">
+                      {adminNotifications.length === 0 ? (
+                        <div className="py-8 text-center text-muted-foreground">
+                          <Bell className="h-6 w-6 mx-auto mb-1 opacity-30" />
+                          <p className="text-xs">No active operational alerts</p>
+                        </div>
+                      ) : (
+                        adminNotifications.slice(0, 8).map((alert) => (
+                          <div
+                            key={alert.id}
+                            onClick={() => {
+                              if (!alert.is_read) markAdminReadMutation.mutate(alert.id);
+                              setAlertsOpen(false);
+                              if (alert.link) navigate(alert.link);
+                            }}
+                            className={`p-3 hover:bg-secondary/60 cursor-pointer transition-colors ${
+                              !alert.is_read ? 'bg-primary/[0.04]' : ''
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className={`font-semibold truncate ${!alert.is_read ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                {alert.title}
+                              </p>
+                              {!alert.is_read && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0 mt-1" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                              {alert.message}
+                            </p>
+                            <span className="text-[10px] text-muted-foreground/60 font-mono mt-1 block">
+                              {formatRelativeTime(alert.created_at || '')}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
 
             {/* Dark / Light Mode Toggle */}
             <ThemeToggle />

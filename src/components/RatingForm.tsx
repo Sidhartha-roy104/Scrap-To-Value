@@ -1,22 +1,26 @@
 import { useState } from 'react';
 import { StarRating } from '@/components/StarRating';
-import { useRatings } from '@/hooks/useRatings';
+import { useOrderReviews } from '@/hooks/useRatings';
+import { createReview } from '@/services/reviewService';
 import { useToastNotification } from '@/components/ToastNotification';
 import { CheckCircle2 } from 'lucide-react';
 import { Spinner } from '@/components/Spinner';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface RatingFormProps {
   transactionId: string;
   sellerId: string;
 }
 
-export function RatingForm({ transactionId, sellerId }: RatingFormProps) {
-  const { getRatingForTransaction, submitRating, isSubmitting } = useRatings();
+export function RatingForm({ transactionId }: RatingFormProps) {
+  const queryClient = useQueryClient();
+  const { data: orderReviews } = useOrderReviews(transactionId);
   const { addToast } = useToastNotification();
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const existing = getRatingForTransaction(transactionId);
+  const existing = orderReviews?.myReview;
 
   if (existing) {
     return (
@@ -26,8 +30,8 @@ export function RatingForm({ transactionId, sellerId }: RatingFormProps) {
           <h4 className="text-sm font-semibold text-foreground">Your Rating</h4>
         </div>
         <StarRating value={existing.rating} readonly size="md" />
-        {existing.review && (
-          <p className="text-sm text-muted-foreground">{existing.review}</p>
+        {existing.comment && (
+          <p className="text-sm text-muted-foreground">{existing.comment}</p>
         )}
       </div>
     );
@@ -38,22 +42,26 @@ export function RatingForm({ transactionId, sellerId }: RatingFormProps) {
       addToast({ type: 'error', title: 'Please select a rating' });
       return;
     }
+    setIsSubmitting(true);
     try {
-      await submitRating({
-        transaction_id: transactionId,
-        seller_id: sellerId,
+      await createReview({
+        requestId: transactionId,
         rating,
-        review: review.trim() || undefined,
+        comment: review.trim() || undefined,
       });
       addToast({ type: 'success', title: 'Rating submitted!', message: 'Thank you for your feedback.' });
+      queryClient.invalidateQueries({ queryKey: ['order_reviews', transactionId] });
+      queryClient.invalidateQueries({ queryKey: ['user_reviews'] });
     } catch (err: any) {
       addToast({ type: 'error', title: 'Failed to submit rating', message: err.message });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
     <div className="card-base p-4 space-y-3">
-      <h4 className="text-sm font-semibold text-foreground">Rate this seller</h4>
+      <h4 className="text-sm font-semibold text-foreground">Rate this transaction</h4>
       <StarRating value={rating} onChange={setRating} size="lg" />
       <textarea
         value={review}

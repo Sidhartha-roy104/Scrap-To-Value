@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   CreditCard,
   PackageCheck,
+  Star,
 } from 'lucide-react';
 import { WasteBadge } from '@/components/WasteBadge';
 import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/data/mockData';
@@ -38,6 +39,7 @@ import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
 import { MockCheckoutModal } from '@/components/MockCheckoutModal';
 import { RaiseDisputeModal } from '@/components/RaiseDisputeModal';
+import { LeaveReviewModal } from '@/components/LeaveReviewModal';
 
 type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
@@ -187,6 +189,7 @@ export default function BuyerOrders() {
   const [selectedRequest, setSelectedRequest] = useState<CollectionRequest | null>(null);
   const [paymentTargetRequest, setPaymentTargetRequest] = useState<CollectionRequest | null>(null);
   const [disputeTargetRequest, setDisputeTargetRequest] = useState<CollectionRequest | null>(null);
+  const [reviewTargetRequest, setReviewTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Fetch buyer requests from backend
   const {
@@ -633,6 +636,15 @@ export default function BuyerOrders() {
                         <span>Pay Now</span>
                       </button>
                     )}
+                    {req.status === 'delivered' && (
+                      <button
+                        onClick={() => setReviewTargetRequest(req)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold transition-colors"
+                      >
+                        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        <span>Review Seller</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => setSelectedRequest(req)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-semibold transition-colors"
@@ -661,6 +673,9 @@ export default function BuyerOrders() {
           onRaiseDispute={(target) => {
             setDisputeTargetRequest(target);
           }}
+          onReview={(target) => {
+            setReviewTargetRequest(target);
+          }}
         />
       )}
 
@@ -687,6 +702,27 @@ export default function BuyerOrders() {
           }}
         />
       )}
+
+      {/* Review Modal */}
+      {reviewTargetRequest && (
+        <LeaveReviewModal
+          isOpen={!!reviewTargetRequest}
+          onClose={() => setReviewTargetRequest(null)}
+          orderData={{
+            id: reviewTargetRequest.id,
+            waste_type: reviewTargetRequest.waste_type,
+            amount: reviewTargetRequest.amount,
+            buyer_id: reviewTargetRequest.buyer_id,
+            seller_id: reviewTargetRequest.seller_id,
+            counterpartyName: reviewTargetRequest.seller?.name,
+            counterpartyCompany: reviewTargetRequest.seller?.company,
+            counterpartyRole: 'seller',
+          }}
+          onReviewSubmitted={() => {
+            handleManualRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -700,9 +736,10 @@ interface OrderDetailsModalProps {
   onRefresh: () => void;
   onPayNow?: (request: CollectionRequest) => void;
   onRaiseDispute?: (request: CollectionRequest) => void;
+  onReview?: (request: CollectionRequest) => void;
 }
 
-function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispute }: OrderDetailsModalProps) {
+function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispute, onReview }: OrderDetailsModalProps) {
   const badge = getStatusBadge(request.status);
   const StatusIcon = badge.icon;
   const paymentBadge = getPaymentBadge(request.payment, request.status);
@@ -1095,6 +1132,15 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispu
               >
                 <CreditCard className="h-3.5 w-3.5" />
                 <span>Pay Now</span>
+              </button>
+            )}
+            {request.status === 'delivered' && (
+              <button
+                onClick={() => onReview?.(request)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-xs font-semibold transition-colors"
+              >
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                <span>Review Seller</span>
               </button>
             )}
             {request.status !== 'cancelled' && request.status !== 'disputed' && (

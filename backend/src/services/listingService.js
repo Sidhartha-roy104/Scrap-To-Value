@@ -62,6 +62,12 @@ function formatListing(row, customBaseUrl) {
           company: row.seller_company ?? null,
           phone: row.seller_phone ?? null,
           avatar_url: row.seller_avatar ?? null,
+          avg_rating: row.seller_avg_rating !== undefined && row.seller_avg_rating !== null
+            ? parseFloat(Number(row.seller_avg_rating).toFixed(1))
+            : 0,
+          total_ratings: row.seller_review_count !== undefined && row.seller_review_count !== null
+            ? parseInt(row.seller_review_count, 10)
+            : 0,
         }
       : undefined,
   };
@@ -181,7 +187,17 @@ async function getListings({
       u.display_name as seller_name,
       u.company_name as seller_company,
       u.phone as seller_phone,
-      u.avatar_url as seller_avatar
+      u.avatar_url as seller_avatar,
+      (
+        SELECT ROUND(COALESCE(AVG(r.rating), 0), 1)
+        FROM reviews r
+        WHERE r.reviewee_id = l.user_id AND r.reviewer_role = 'buyer' AND r.status = 'visible'
+      ) AS seller_avg_rating,
+      (
+        SELECT COUNT(*)
+        FROM reviews r
+        WHERE r.reviewee_id = l.user_id AND r.reviewer_role = 'buyer' AND r.status = 'visible'
+      ) AS seller_review_count
     FROM waste_listings l
     LEFT JOIN users u ON l.user_id = u.id
     ${whereClause}
@@ -211,7 +227,17 @@ async function getListingById(id) {
       u.display_name as seller_name,
       u.company_name as seller_company,
       u.phone as seller_phone,
-      u.avatar_url as seller_avatar
+      u.avatar_url as seller_avatar,
+      (
+        SELECT ROUND(COALESCE(AVG(r.rating), 0), 1)
+        FROM reviews r
+        WHERE r.reviewee_id = l.user_id AND r.reviewer_role = 'buyer' AND r.status = 'visible'
+      ) AS seller_avg_rating,
+      (
+        SELECT COUNT(*)
+        FROM reviews r
+        WHERE r.reviewee_id = l.user_id AND r.reviewer_role = 'buyer' AND r.status = 'visible'
+      ) AS seller_review_count
     FROM waste_listings l
     LEFT JOIN users u ON l.user_id = u.id
     WHERE l.id = ?

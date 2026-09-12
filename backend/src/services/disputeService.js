@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const { pool } = require('../config/db');
+const notificationService = require('./notificationService');
 
 const VALID_DISPUTE_STATUSES = ['open', 'under_review', 'resolved', 'rejected', 'closed'];
 
@@ -125,6 +126,34 @@ async function createDispute({
     }
 
     await connection.commit();
+
+    // Notify opposing party
+    const opposingRecipient = effectiveRole === 'buyer' ? order.seller_id : order.buyer_id;
+    if (opposingRecipient) {
+      notificationService.createNotification({
+        recipientId: opposingRecipient,
+        type: notificationService.NotificationTypes.DISPUTE_RAISED,
+        title: `Dispute Raised on Order #${requestId.slice(0, 8).toUpperCase()}`,
+        message: `The ${effectiveRole} raised a dispute for reason: "${reason.trim()}". Our compliance team has been alerted.`,
+        relatedRequestId: requestId,
+        relatedDisputeId: disputeId,
+        relatedEntityType: 'dispute',
+        relatedEntityId: disputeId,
+        link: '/orders',
+        dedupKey: `dispute:RAISED_OPPOSING:${disputeId}`,
+      });
+    }
+
+    // Operational Alert: Broadcast to all administrators
+    notificationService.notifyAdmins({
+      type: notificationService.NotificationTypes.ADMIN_ALERT,
+      title: `New Dispute: Order #${requestId.slice(0, 8).toUpperCase()}`,
+      message: `${effectiveRole.toUpperCase()} filed a dispute: "${reason.trim()}". Requires compliance review.`,
+      link: '/admin/disputes',
+      relatedEntityId: disputeId,
+      relatedEntityType: 'dispute',
+      dedupKey: `dispute:RAISED_ADMIN:${disputeId}`,
+    });
   } catch (err) {
     await connection.rollback();
     throw err;
@@ -429,6 +458,24 @@ async function updateDisputeStatus(id, adminId, { status, admin_resolution, admi
     );
 
     await connection.commit();
+
+    // Notify buyer and seller about dispute update or resolution
+    const recipients = [dispute.order.buyer_id, dispute.order.seller_id].filter(Boolean);
+    notificationService.createBulkNotifications(recipients, {
+      type: status === 'under_review'
+        ? notificationService.NotificationTypes.DISPUTE_UNDER_REVIEW
+        : notificationService.NotificationTypes.DISPUTE_RESOLVED,
+      title: `Dispute ${status.toUpperCase().replace('_', ' ')}: Order #${dispute.request_id.slice(0, 8).toUpperCase()}`,
+      message: admin_resolution
+        ? `Resolution: ${admin_resolution}`
+        : `Dispute status updated to ${status}.`,
+      relatedRequestId: dispute.request_id,
+      relatedDisputeId: id,
+      relatedEntityType: 'dispute',
+      relatedEntityId: id,
+      link: '/orders',
+      dedupKey: `dispute:${status.toUpperCase()}:${id}`,
+    });
   } catch (err) {
     await connection.rollback();
     throw err;

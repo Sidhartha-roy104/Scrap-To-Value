@@ -17,6 +17,7 @@ import Profile from "@/pages/Profile";
 import Plans from "@/pages/Plans";
 import Orders from "@/pages/Orders";
 import OrderTracking from "@/pages/OrderTracking";
+import NotificationsPage from "@/pages/NotificationsPage";
 import NotFound from "@/pages/NotFound";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminOrders from "@/pages/admin/AdminOrders";
@@ -60,6 +61,7 @@ const App = () => (
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/my-orders" element={<Orders />} />
                 <Route path="/orders/:orderId" element={<OrderTracking />} />
+                <Route path="/notifications" element={<NotificationsPage />} />
               </Route>
               {/* Dedicated Admin Console Layout & Protected Routes */}
               <Route element={

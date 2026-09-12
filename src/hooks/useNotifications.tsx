@@ -1,174 +1,199 @@
-import { useCallback, useEffect, createContext, useContext } from 'react';
+/**
+ * hooks/useNotifications.tsx
+ * ----------------------------
+ * Notification context hook connected to Rubbish Revamp Express + MySQL backend.
+ */
+
+import { createContext, useContext, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  getNotifications,
+  getUnreadCount,
+  markAsRead as apiMarkAsRead,
+  markAllAsRead as apiMarkAllAsRead,
+  deleteNotification as apiDeleteNotification,
+  clearAllNotifications as apiClearAllNotifications,
+  type AppNotification,
+  type NotificationType,
+} from '@/services/notificationService';
 
-export type NotificationType = 'listing' | 'deal' | 'score' | 'system';
-
-export interface AppNotification {
-  id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
+export type { AppNotification, NotificationType };
 
 interface NotificationContextType {
   notifications: AppNotification[];
   unreadCount: number;
   isLoading: boolean;
-  markAsRead: (id: string) => void;
-  markAllAsRead: () => void;
-  clearAll: () => void;
-  addNotification: (n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>) => void;
+  isError: boolean;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  clearAll: () => Promise<void>;
+  refetch: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
-
-async function fetchNotifications(userId: string): Promise<AppNotification[]> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((n: any) => ({
-    id: n.id,
-    type: n.type as NotificationType,
-    title: n.title,
-    message: n.message,
-    read: n.read,
-    createdAt: n.created_at,
-  }));
-}
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const queryKey = ['notifications', user?.id];
+  const unreadKey = ['notifications_unread', user?.id];
 
-  const { data: notifications = [], isLoading } = useQuery({
+  // Fetch recent notifications (top 25)
+  const {
+    data: listData,
+    isLoading: isListLoading,
+    isError: isListError,
+    refetch: refetchList,
+  } = useQuery({
     queryKey,
-    queryFn: () => fetchNotifications(user!.id),
+    queryFn: async () => {
+      const res = await getNotifications({ limit: 25 });
+      return res.data?.notifications ?? [];
+    },
     enabled: !!user,
+    staleTime: 1000 * 15,
+    refetchInterval: 1000 * 20, // Polling every 20s
   });
 
-  // Realtime subscription for instant notifications
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey });
-        }
-      )
-      .subscribe();
+  // Fetch unread count
+  const {
+    data: countData,
+    refetch: refetchCount,
+  } = useQuery({
+    queryKey: unreadKey,
+    queryFn: async () => {
+      const res = await getUnreadCount();
+      return res.data?.unreadCount ?? 0;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 15,
+    refetchInterval: 1000 * 20,
+  });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, queryClient, queryKey]);
+  const notifications = useMemo(() => {
+    return (listData ?? []).map((n) => ({
+      ...n,
+      read: n.is_read ?? false,
+      createdAt: n.created_at,
+    }));
+  }, [listData]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = countData ?? notifications.filter((n) => !n.is_read).length;
 
+  // Mark single as read
   const markAsReadMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', id);
-      if (error) throw error;
+      await apiMarkAsRead(id);
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey });
-      const prev = queryClient.getQueryData<AppNotification[]>(queryKey);
-      queryClient.setQueryData<AppNotification[]>(queryKey, old =>
-        (old ?? []).map(n => n.id === id ? { ...n, read: true } : n)
+      const previous = queryClient.getQueryData<AppNotification[]>(queryKey);
+      queryClient.setQueryData<AppNotification[]>(queryKey, (old) =>
+        (old ?? []).map((n) => (n.id === id ? { ...n, is_read: true, read: true } : n))
       );
-      return { prev };
+      queryClient.setQueryData<number>(unreadKey, (prev) => Math.max(0, (prev ?? 1) - 1));
+      return { previous };
     },
     onError: (_err, _id, context) => {
-      if (context?.prev) queryClient.setQueryData(queryKey, context.prev);
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+      queryClient.invalidateQueries({ queryKey: unreadKey });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: unreadKey });
     },
   });
 
+  // Mark all as read
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
-      if (!user) return;
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', user.id)
-        .eq('read', false);
-      if (error) throw error;
+      await apiMarkAllAsRead();
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey });
-      const prev = queryClient.getQueryData<AppNotification[]>(queryKey);
-      queryClient.setQueryData<AppNotification[]>(queryKey, old =>
-        (old ?? []).map(n => ({ ...n, read: true }))
+      const previous = queryClient.getQueryData<AppNotification[]>(queryKey);
+      queryClient.setQueryData<AppNotification[]>(queryKey, (old) =>
+        (old ?? []).map((n) => ({ ...n, is_read: true, read: true }))
       );
-      return { prev };
+      queryClient.setQueryData<number>(unreadKey, 0);
+      return { previous };
     },
-    onError: (_err, _vars, context) => {
-      if (context?.prev) queryClient.setQueryData(queryKey, context.prev);
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: unreadKey });
     },
   });
 
+  // Delete notification
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiDeleteNotification(id);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: unreadKey });
+    },
+  });
+
+  // Clear all notifications
   const clearAllMutation = useMutation({
     mutationFn: async () => {
-      if (!user) return;
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', user.id);
-      if (error) throw error;
+      await apiClearAllNotifications();
     },
-    onSuccess: () => queryClient.setQueryData(queryKey, []),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: unreadKey });
+    },
   });
 
-  const addMutation = useMutation({
-    mutationFn: async (n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>) => {
-      if (!user) throw new Error('Not authenticated');
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: user.id,
-          type: n.type,
-          title: n.title,
-          message: n.message,
-        });
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
-  });
-
-  const markAsRead = useCallback((id: string) => markAsReadMutation.mutate(id), [markAsReadMutation]);
-  const markAllAsRead = useCallback(() => markAllAsReadMutation.mutate(), [markAllAsReadMutation]);
-  const clearAll = useCallback(() => clearAllMutation.mutate(), [clearAllMutation]);
-  const addNotification = useCallback(
-    (n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>) => addMutation.mutate(n),
-    [addMutation]
+  const value = useMemo(
+    () => ({
+      notifications,
+      unreadCount,
+      isLoading: isListLoading,
+      isError: isListError,
+      markAsRead: async (id: string) => {
+        await markAsReadMutation.mutateAsync(id);
+      },
+      markAllAsRead: async () => {
+        await markAllAsReadMutation.mutateAsync();
+      },
+      deleteNotification: async (id: string) => {
+        await deleteMutation.mutateAsync(id);
+      },
+      clearAll: async () => {
+        await clearAllMutation.mutateAsync();
+      },
+      refetch: () => {
+        refetchList();
+        refetchCount();
+      },
+    }),
+    [
+      notifications,
+      unreadCount,
+      isListLoading,
+      isListError,
+      markAsReadMutation,
+      markAllAsReadMutation,
+      deleteMutation,
+      clearAllMutation,
+      refetchList,
+      refetchCount,
+    ]
   );
 
-  return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, isLoading, markAsRead, markAllAsRead, clearAll, addNotification }}>
-      {children}
-    </NotificationContext.Provider>
-  );
+  return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
-  if (!context) throw new Error('useNotifications must be used within NotificationProvider');
+  if (!context) {
+    throw new Error('useNotifications must be used within a NotificationProvider');
+  }
   return context;
 }

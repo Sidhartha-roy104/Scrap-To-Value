@@ -8,6 +8,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/db');
 const inventoryService = require('./inventoryService');
+const notificationService = require('./notificationService');
 
 /**
  * Formats a raw database row into a structured response object.
@@ -221,6 +222,23 @@ async function createRequest({
     ]);
 
     await connection.commit();
+
+    // Trigger non-blocking notification to seller
+    try {
+      await notificationService.createNotification({
+        recipientId: sellerId,
+        type: notificationService.NotificationTypes.ORDER_CREATED,
+        title: 'New Scrap Request Received',
+        message: `A buyer placed an order for ${numQty}kg of ${wasteType} (Total: ₹${total_amount}).`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:CREATED:${id}`,
+      });
+    } catch (notifErr) {
+      console.warn('[RequestService] Could not send request notification:', notifErr.message);
+    }
 
     return getRequestById(id);
   } catch (err) {
@@ -510,6 +528,81 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
     );
 
     await connection.commit();
+
+    // Trigger non-blocking notifications based on target status
+    if (status === 'awaiting_payment') {
+      notificationService.createNotification({
+        recipientId: existing.buyer_id,
+        type: notificationService.NotificationTypes.ORDER_ACCEPTED,
+        title: 'Order Accepted — Payment Required',
+        message: `The seller accepted your order for ${existing.quantity}kg of ${existing.waste_type || 'scrap'}. Please pay ₹${existing.amount} to confirm.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:ACCEPTED:${id}`,
+      });
+    } else if (status === 'cancelled') {
+      const recipientId = userId === existing.buyer_id ? existing.seller_id : existing.buyer_id;
+      notificationService.createNotification({
+        recipientId,
+        type: notificationService.NotificationTypes.ORDER_CANCELLED,
+        title: 'Order Cancelled',
+        message: `Order #${id.slice(0, 8).toUpperCase()} was cancelled.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:CANCELLED:${id}`,
+      });
+    } else if (status === 'ready_for_pickup') {
+      notificationService.createNotification({
+        recipientId: existing.buyer_id,
+        type: notificationService.NotificationTypes.READY_FOR_PICKUP,
+        title: 'Order Ready for Pickup',
+        message: `Order #${id.slice(0, 8).toUpperCase()} is prepared and ready for collection.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:READY:${id}`,
+      });
+    } else if (status === 'in_transit') {
+      notificationService.createNotification({
+        recipientId: existing.buyer_id,
+        type: notificationService.NotificationTypes.ORDER_IN_TRANSIT,
+        title: 'Order In Transit',
+        message: `Order #${id.slice(0, 8).toUpperCase()} has been dispatched and is on its way.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:TRANSIT:${id}`,
+      });
+    } else if (status === 'delivered') {
+      notificationService.createNotification({
+        recipientId: existing.buyer_id,
+        type: notificationService.NotificationTypes.ORDER_DELIVERED,
+        title: 'Order Delivered Successfully',
+        message: `Your order #${id.slice(0, 8).toUpperCase()} (${existing.quantity}kg) was successfully delivered.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:DELIVERED_BUYER:${id}`,
+      });
+      notificationService.createNotification({
+        recipientId: existing.seller_id,
+        type: notificationService.NotificationTypes.ORDER_DELIVERED,
+        title: 'Order Fulfillment Complete',
+        message: `Order #${id.slice(0, 8).toUpperCase()} has been delivered and fulfilled.`,
+        relatedRequestId: id,
+        relatedEntityType: 'order',
+        relatedEntityId: id,
+        link: '/orders',
+        dedupKey: `order:DELIVERED_SELLER:${id}`,
+      });
+    }
   } catch (err) {
     await connection.rollback();
     throw err;

@@ -6,6 +6,7 @@
  */
 
 const { pool } = require('../config/db');
+const notificationService = require('./notificationService');
 
 /**
  * Retrieves aggregate platform statistics from real MySQL database data.
@@ -729,6 +730,18 @@ async function updateSellerVerification(sellerId, adminId, { kyc_verified, kyc_n
     [sellerId]
   );
 
+  // Trigger non-blocking notification to seller
+  notificationService.createNotification({
+    recipientId: sellerId,
+    type: notificationService.NotificationTypes.SELLER_VERIFICATION_UPDATED,
+    title: 'Seller Verification Status Updated',
+    message: `Your seller verification status is now ${kyc_verified ? 'VERIFIED' : 'UNVERIFIED'}.${kyc_notes ? ' Note: ' + kyc_notes : ''}`,
+    link: '/dashboard',
+    relatedEntityType: 'seller',
+    relatedEntityId: sellerId,
+    dedupKey: `seller:KYC:${sellerId}:${kyc_verified ? '1' : '0'}:${Date.now()}`,
+  });
+
   return {
     ...updated[0],
     kyc_verified: Boolean(updated[0].kyc_verified),
@@ -919,7 +932,22 @@ async function updateListingStatus(listingId, { status }) {
   );
 
   const [updated] = await pool.execute(`SELECT * FROM waste_listings WHERE id = ?`, [listingId]);
-  return updated[0];
+  const listing = updated[0];
+
+  if (listing && ['inactive', 'flagged'].includes(status.toLowerCase())) {
+    notificationService.createNotification({
+      recipientId: listing.user_id,
+      type: notificationService.NotificationTypes.LISTING_FLAGGED,
+      title: 'Listing Moderation Notice',
+      message: `Your listing "${listing.title}" has been updated to "${status}" by platform administration.`,
+      link: '/marketplace',
+      relatedEntityType: 'listing',
+      relatedEntityId: listingId,
+      dedupKey: `listing:MODERATED:${listingId}:${status}:${Date.now()}`,
+    });
+  }
+
+  return listing;
 }
 
 /**

@@ -204,28 +204,42 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
 
         {/* Seller Info (if available from API) */}
         {listing.seller && (
-          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/60">
-            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
-              {listing.seller.name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seller</span>
-                <span className="text-sm font-semibold text-foreground truncate">{listing.seller.name}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/60">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm flex-shrink-0">
+                {listing.seller.name.charAt(0).toUpperCase()}
               </div>
-              {listing.seller.company && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                  <Building2 className="h-3 w-3 flex-shrink-0" />
-                  <span className="truncate">{listing.seller.company}</span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seller</span>
+                  <span className="text-sm font-semibold text-foreground truncate">{listing.seller.name}</span>
+                </div>
+                {listing.seller.company && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                    <Building2 className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{listing.seller.company}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap justify-end">
+              <SellerRatingBadge
+                sellerId={listing.user_id}
+                initialRating={(listing.seller as any)?.avg_rating !== undefined ? {
+                  avg_rating: (listing.seller as any).avg_rating,
+                  total_ratings: (listing.seller as any).total_ratings,
+                } : undefined}
+                size="sm"
+                showEmpty
+              />
+              {listing.seller.phone && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/80 px-2.5 py-1 rounded-md border border-border/40">
+                  <Phone className="h-3 w-3 text-primary" />
+                  <span>{listing.seller.phone}</span>
                 </div>
               )}
             </div>
-            {listing.seller.phone && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground bg-background/80 px-2.5 py-1 rounded-md border border-border/40">
-                <Phone className="h-3 w-3 text-primary" />
-                <span>{listing.seller.phone}</span>
-              </div>
-            )}
           </div>
         )}
 

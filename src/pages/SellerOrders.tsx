@@ -26,6 +26,7 @@ import {
   Loader2,
   Filter,
   PackageCheck,
+  Star,
 } from 'lucide-react';
 import { WasteBadge } from '@/components/WasteBadge';
 import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/data/mockData';
@@ -872,9 +873,10 @@ export default function SellerOrders() {
                 </button>
               )}
 
-              {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'disputed' && selectedRequest.status !== 'pending' && (
+
+
+              {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'disputed' && (
                 <button
-                  type="button"
                   onClick={() => {
                     setDisputeTargetRequest(selectedRequest);
                   }}
@@ -1042,7 +1044,6 @@ export default function SellerOrders() {
           </div>
         </Modal>
       )}
-      {/* 3. Raise Dispute Modal */}
       {disputeTargetRequest && (
         <RaiseDisputeModal
           isOpen={!!disputeTargetRequest}
@@ -1060,6 +1061,8 @@ export default function SellerOrders() {
           }}
         />
       )}
+
+
     </div>
   );
 }
