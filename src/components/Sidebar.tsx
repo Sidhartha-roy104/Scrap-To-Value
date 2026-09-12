@@ -7,9 +7,12 @@ import {
   CreditCard,
   Package,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  ShieldAlert,
+  Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useUserRole } from '@/hooks/useUserRole';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -25,8 +28,16 @@ const navItems = [
   { path: '/plans', label: 'Plans', icon: CreditCard },
 ];
 
+const adminNavItems = [
+  { path: '/admin', label: 'Admin Overview', icon: Shield },
+  { path: '/admin/orders', label: 'Admin Orders', icon: Package },
+  { path: '/admin/disputes', label: 'Disputes', icon: ShieldAlert },
+  { path: '/admin/users', label: 'User Directory', icon: Users },
+];
+
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const location = useLocation();
+  const { role } = useUserRole();
 
   return (
     <aside 
@@ -47,7 +58,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map(item => {
           const isActive = location.pathname === item.path;
           return (
@@ -65,6 +76,33 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             </Link>
           );
         })}
+
+        {role === 'admin' && (
+          <div className="pt-4 border-t border-sidebar-border/80 mt-3 space-y-1">
+            {!collapsed && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 block mb-1">
+                Admin Controls
+              </span>
+            )}
+            {adminNavItems.map(item => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'bg-sidebar-accent text-primary border-l-2 border-primary ml-[-2px] font-semibold'
+                      : 'text-sidebar-foreground hover:bg-secondary hover:text-foreground'
+                  }`}
+                >
+                  <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                  {!collapsed && <span>{item.label}</span>}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Collapse Toggle */}

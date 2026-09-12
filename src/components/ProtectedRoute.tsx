@@ -4,7 +4,13 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { RoleSelectionScreen } from '@/components/RoleSelectionScreen';
 import { Loader2 } from 'lucide-react';
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+export function ProtectedRoute({
+  children,
+  allowedRoles,
+}: {
+  children: React.ReactNode;
+  allowedRoles?: string[];
+}) {
   const { user, loading } = useAuth();
   const { role, isLoading: roleLoading } = useUserRole();
 
@@ -22,6 +28,10 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (!role) {
     return <RoleSelectionScreen />;
+  }
+
+  if (allowedRoles && !allowedRoles.includes(role)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

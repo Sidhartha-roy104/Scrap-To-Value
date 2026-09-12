@@ -37,6 +37,7 @@ import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/d
 import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
 import { MockCheckoutModal } from '@/components/MockCheckoutModal';
+import { RaiseDisputeModal } from '@/components/RaiseDisputeModal';
 
 type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
@@ -185,6 +186,7 @@ export default function BuyerOrders() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<CollectionRequest | null>(null);
   const [paymentTargetRequest, setPaymentTargetRequest] = useState<CollectionRequest | null>(null);
+  const [disputeTargetRequest, setDisputeTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Fetch buyer requests from backend
   const {
@@ -656,6 +658,9 @@ export default function BuyerOrders() {
             setSelectedRequest(null);
             setPaymentTargetRequest(target);
           }}
+          onRaiseDispute={(target) => {
+            setDisputeTargetRequest(target);
+          }}
         />
       )}
 
@@ -666,6 +671,18 @@ export default function BuyerOrders() {
           onClose={() => setPaymentTargetRequest(null)}
           request={paymentTargetRequest}
           onPaymentComplete={() => {
+            handleManualRefresh();
+          }}
+        />
+      )}
+
+      {/* Raise Dispute Modal */}
+      {disputeTargetRequest && (
+        <RaiseDisputeModal
+          isOpen={!!disputeTargetRequest}
+          onClose={() => setDisputeTargetRequest(null)}
+          order={disputeTargetRequest}
+          onSuccess={() => {
             handleManualRefresh();
           }}
         />
@@ -682,9 +699,10 @@ interface OrderDetailsModalProps {
   onClose: () => void;
   onRefresh: () => void;
   onPayNow?: (request: CollectionRequest) => void;
+  onRaiseDispute?: (request: CollectionRequest) => void;
 }
 
-function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetailsModalProps) {
+function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispute }: OrderDetailsModalProps) {
   const badge = getStatusBadge(request.status);
   const StatusIcon = badge.icon;
   const paymentBadge = getPaymentBadge(request.payment, request.status);
@@ -1077,6 +1095,15 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetai
               >
                 <CreditCard className="h-3.5 w-3.5" />
                 <span>Pay Now</span>
+              </button>
+            )}
+            {request.status !== 'cancelled' && request.status !== 'disputed' && (
+              <button
+                onClick={() => onRaiseDispute?.(request)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 text-xs font-semibold transition-colors"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Raise Dispute</span>
               </button>
             )}
             <button

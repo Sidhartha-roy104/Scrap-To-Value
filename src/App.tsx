@@ -18,6 +18,10 @@ import Plans from "@/pages/Plans";
 import Orders from "@/pages/Orders";
 import OrderTracking from "@/pages/OrderTracking";
 import NotFound from "@/pages/NotFound";
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminOrders from "@/pages/admin/AdminOrders";
+import AdminDisputes from "@/pages/admin/AdminDisputes";
+import AdminUsers from "@/pages/admin/AdminUsers";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +50,17 @@ const App = () => (
                 <Route path="/orders" element={<Orders />} />
                 <Route path="/my-orders" element={<Orders />} />
                 <Route path="/orders/:orderId" element={<OrderTracking />} />
+              </Route>
+              {/* Admin Protected Routes */}
+              <Route element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <Layout />
+                </ProtectedRoute>
+              }>
+                <Route path="/admin" element={<AdminDashboard />} />
+                <Route path="/admin/orders" element={<AdminOrders />} />
+                <Route path="/admin/disputes" element={<AdminDisputes />} />
+                <Route path="/admin/users" element={<AdminUsers />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -22,6 +22,7 @@ import {
   Scale, 
   IndianRupee, 
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Filter,
   PackageCheck,
@@ -31,8 +32,9 @@ import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/d
 import { Modal } from '@/components/Modal';
 import { useToastNotification } from '@/components/ToastNotification';
 import { ListingImage } from '@/components/ListingImage';
+import { RaiseDisputeModal } from '@/components/RaiseDisputeModal';
 
-type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled';
+type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
 const FILTER_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'All', label: 'All Requests' },
@@ -43,6 +45,7 @@ const FILTER_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'in_transit', label: 'In Transit' },
   { key: 'delivered', label: 'Delivered' },
   { key: 'cancelled', label: 'Cancelled' },
+  { key: 'disputed', label: 'Disputed' },
 ];
 
 function getStatusBadge(status: RequestStatus) {
@@ -89,6 +92,12 @@ function getStatusBadge(status: RequestStatus) {
         className: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
         icon: XCircle,
       };
+    case 'disputed':
+      return {
+        label: 'Disputed',
+        className: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+        icon: AlertTriangle,
+      };
     default:
       return {
         label: status,
@@ -105,6 +114,7 @@ export default function SellerOrders() {
   const [activeFilter, setActiveFilter] = useState<StatusFilter>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<CollectionRequest | null>(null);
+  const [disputeTargetRequest, setDisputeTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Confirmation action modals
   const [actionConfirm, setActionConfirm] = useState<{
@@ -862,6 +872,18 @@ export default function SellerOrders() {
                 </button>
               )}
 
+              {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'disputed' && selectedRequest.status !== 'pending' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDisputeTargetRequest(selectedRequest);
+                  }}
+                  className="px-3.5 py-2 rounded-lg border border-purple-500/30 text-purple-600 dark:text-purple-400 bg-purple-500/10 hover:bg-purple-500/20 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" /> Raise Dispute
+                </button>
+              )}
+
               <button onClick={() => setSelectedRequest(null)} className="btn-secondary text-xs">
                 Close
               </button>
@@ -1019,6 +1041,24 @@ export default function SellerOrders() {
             </div>
           </div>
         </Modal>
+      )}
+      {/* 3. Raise Dispute Modal */}
+      {disputeTargetRequest && (
+        <RaiseDisputeModal
+          isOpen={!!disputeTargetRequest}
+          onClose={() => setDisputeTargetRequest(null)}
+          order={disputeTargetRequest}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['seller_requests'] });
+            refetch();
+            setSelectedRequest(null);
+            addToast({
+              type: 'success',
+              title: 'Dispute Submitted',
+              message: 'Your dispute has been logged and is under admin review.',
+            });
+          }}
+        />
       )}
     </div>
   );

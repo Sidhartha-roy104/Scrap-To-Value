@@ -22,6 +22,8 @@ const listingRoutes = require('./routes/listingRoutes');
 const requestRoutes = require('./routes/requestRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const disputeRoutes = require('./routes/disputeRoutes');
 
 const app = express();
 
@@ -120,11 +122,8 @@ app.use('/api/listings', listingRoutes); // Scrap listings & marketplace
 app.use('/api/requests', requestRoutes); // Collection requests & buyer orders
 app.use('/api/inventory', inventoryRoutes); // Inventory status & audit history
 app.use('/api/payments', paymentRoutes);   // Mock payments & order confirmation
-
-// Phase 3+ routes (not yet implemented):
-// app.use('/api/dashboard',     require('./routes/dashboardRoutes'));
-// app.use('/api/notifications', require('./routes/notificationRoutes'));
-// app.use('/api/admin',         require('./routes/adminRoutes'));
+app.use('/api/admin', adminRoutes);         // Phase 7: Admin operations & metrics
+app.use('/api/disputes', disputeRoutes);   // Phase 7: Dispute management & resolution
 
 // ---------------------------------------------------------------------------
 // 404 Handler
