@@ -13,7 +13,9 @@ import { apiClient, type ApiResponse } from '@/services/api';
 
 export type RequestStatus =
   | 'pending'
+  | 'awaiting_payment'
   | 'confirmed'
+  | 'ready_for_pickup'
   | 'in_transit'
   | 'delivered'
   | 'cancelled'
@@ -23,6 +25,18 @@ export interface TrackingUpdate {
   timestamp: string;
   status: string;
   note?: string;
+}
+
+export interface FulfillmentActivity {
+  id: string;
+  request_id: string;
+  previous_status: string | null;
+  new_status: string;
+  changed_by: string;
+  actor_role: string;
+  actor_name?: string;
+  notes: string | null;
+  created_at: string;
 }
 
 export interface CollectionRequest {
@@ -41,6 +55,10 @@ export interface CollectionRequest {
   delivery_otp?: string | null;
   created_at: string;
   updated_at: string;
+  ready_at?: string | null;
+  dispatched_at?: string | null;
+  delivered_at?: string | null;
+  fulfillment_notes?: string | null;
   reservation?: {
     status: string;
     reserved_quantity: number;
@@ -156,5 +174,17 @@ export async function updateRequestStatus(
   return apiClient.patch<ApiResponse<{ request: CollectionRequest }>>(
     `/api/requests/${id}/status`,
     payload,
+  );
+}
+
+/**
+ * GET /api/requests/:id/history
+ * Retrieves fulfillment audit history for a collection request.
+ */
+export async function getFulfillmentHistory(
+  id: string,
+): Promise<ApiResponse<{ history: FulfillmentActivity[] }>> {
+  return apiClient.get<ApiResponse<{ history: FulfillmentActivity[] }>>(
+    `/api/requests/${id}/history`,
   );
 }

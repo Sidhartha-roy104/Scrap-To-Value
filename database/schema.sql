@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS collection_requests (
   buyer_message       TEXT            DEFAULT NULL,
   status              ENUM(
                         'pending',
+                        'awaiting_payment',
                         'confirmed',
                         'in_transit',
                         'delivered',

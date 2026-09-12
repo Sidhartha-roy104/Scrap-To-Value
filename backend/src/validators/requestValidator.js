@@ -8,7 +8,9 @@ const { body, param } = require('express-validator');
 
 const VALID_STATUSES = [
   'pending',
+  'awaiting_payment',
   'confirmed',
+  'ready_for_pickup',
   'in_transit',
   'delivered',
   'cancelled',

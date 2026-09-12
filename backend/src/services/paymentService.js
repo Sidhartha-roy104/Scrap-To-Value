@@ -72,11 +72,10 @@ async function createPayment({
     throw err;
   }
 
-  // 3. Status eligibility check
-  const INELIGIBLE_STATUSES = ['delivered', 'cancelled', 'disputed'];
-  if (INELIGIBLE_STATUSES.includes(request.status)) {
+  // 3. Status eligibility check: payment can ONLY be initiated after seller acceptance (awaiting_payment)
+  if (request.status !== 'awaiting_payment') {
     const err = new Error(
-      `Cannot initiate payment for an order with status "${request.status}".`
+      `Cannot initiate payment for an order with status "${request.status}". Order must be accepted by seller (awaiting payment) before payment can be initiated.`
     );
     err.code = 'INVALID_ORDER_STATE';
     throw err;

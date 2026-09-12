@@ -48,6 +48,7 @@ async function createPayment(req, res, next) {
     if (status < 500) {
       return res.status(status).json({
         success: false,
+        error_code: err.code || undefined,
         message: err.message,
         payment: err.payment || undefined,
       });
@@ -234,6 +235,19 @@ async function processMockRefund(req, res, next) {
   }
 }
 
+async function getPaymentAuditLedger(req, res, next) {
+  try {
+    const { id } = req.params;
+    const transactions = await paymentService.getPaymentAuditLedger(id);
+    return res.status(200).json({
+      success: true,
+      data: { transactions },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   createPayment,
   processMockSuccess,
@@ -242,4 +256,5 @@ module.exports = {
   getPaymentById,
   getPaymentByRequestId,
   processMockRefund,
+  getPaymentAuditLedger,
 };

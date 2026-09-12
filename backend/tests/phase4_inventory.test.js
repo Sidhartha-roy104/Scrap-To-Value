@@ -159,9 +159,12 @@ async function runTests() {
   }, buyerToken);
   const order5Id = order5Res.body.data?.request?.id;
 
-  // Seller accepts (confirmed)
-  await req('/api/requests/' + order5Id + '/status', 'PATCH', { status: 'confirmed' }, sellerToken);
-  // Seller ships (in_transit)
+  // Seller accepts (awaiting_payment) and buyer pays (confirmed)
+  await req('/api/requests/' + order5Id + '/status', 'PATCH', { status: 'awaiting_payment' }, sellerToken);
+  const payRes = await req('/api/payments', 'POST', { request_id: order5Id }, buyerToken);
+  await req('/api/payments/' + payRes.body.data.payment.id + '/mock-success', 'POST', {}, buyerToken);
+  // Seller prepares (ready_for_pickup) and ships (in_transit)
+  await req('/api/requests/' + order5Id + '/status', 'PATCH', { status: 'ready_for_pickup' }, sellerToken);
   await req('/api/requests/' + order5Id + '/status', 'PATCH', { status: 'in_transit' }, sellerToken);
   // Seller marks delivered
   const deliverRes = await req('/api/requests/' + order5Id + '/status', 'PATCH', { status: 'delivered', note: 'Goods delivered' }, sellerToken);

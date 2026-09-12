@@ -24,6 +24,7 @@ import {
   AlertCircle,
   Loader2,
   Filter,
+  PackageCheck,
 } from 'lucide-react';
 import { WasteBadge } from '@/components/WasteBadge';
 import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/data/mockData';
@@ -31,12 +32,14 @@ import { Modal } from '@/components/Modal';
 import { useToastNotification } from '@/components/ToastNotification';
 import { ListingImage } from '@/components/ListingImage';
 
-type StatusFilter = 'All' | 'pending' | 'confirmed' | 'in_transit' | 'delivered' | 'cancelled';
+type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled';
 
 const FILTER_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'All', label: 'All Requests' },
-  { key: 'pending', label: 'Pending' },
+  { key: 'pending', label: 'Pending Review' },
+  { key: 'awaiting_payment', label: 'Awaiting Payment' },
   { key: 'confirmed', label: 'Confirmed' },
+  { key: 'ready_for_pickup', label: 'Ready for Pickup' },
   { key: 'in_transit', label: 'In Transit' },
   { key: 'delivered', label: 'Delivered' },
   { key: 'cancelled', label: 'Cancelled' },
@@ -50,11 +53,23 @@ function getStatusBadge(status: RequestStatus) {
         className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
         icon: Clock,
       };
+    case 'awaiting_payment':
+      return {
+        label: 'Awaiting Payment',
+        className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+        icon: Clock,
+      };
     case 'confirmed':
       return {
         label: 'Confirmed',
         className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
         icon: CheckCircle2,
+      };
+    case 'ready_for_pickup':
+      return {
+        label: 'Ready for Pickup',
+        className: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+        icon: PackageCheck,
       };
     case 'in_transit':
       return {
@@ -93,10 +108,10 @@ export default function SellerOrders() {
 
   // Confirmation action modals
   const [actionConfirm, setActionConfirm] = useState<{
-    type: 'accept' | 'reject';
+    type: 'accept' | 'reject' | 'ready_for_pickup' | 'in_transit' | 'delivered';
     request: CollectionRequest;
   } | null>(null);
-  const [rejectionNote, setRejectionNote] = useState('');
+  const [actionNote, setActionNote] = useState('');
 
   // 1. Fetch Requests from backend
   const {
@@ -121,8 +136,24 @@ export default function SellerOrders() {
     () => allRequests.filter((r) => r.status === 'pending').length,
     [allRequests]
   );
+  const awaitingPaymentCount = useMemo(
+    () => allRequests.filter((r) => r.status === 'awaiting_payment').length,
+    [allRequests]
+  );
   const confirmedCount = useMemo(
     () => allRequests.filter((r) => r.status === 'confirmed').length,
+    [allRequests]
+  );
+  const readyForPickupCount = useMemo(
+    () => allRequests.filter((r) => r.status === 'ready_for_pickup').length,
+    [allRequests]
+  );
+  const inTransitCount = useMemo(
+    () => allRequests.filter((r) => r.status === 'in_transit').length,
+    [allRequests]
+  );
+  const deliveredCount = useMemo(
+    () => allRequests.filter((r) => r.status === 'delivered').length,
     [allRequests]
   );
 
@@ -148,7 +179,7 @@ export default function SellerOrders() {
     });
   }, [allRequests, activeFilter, searchQuery]);
 
-  // 4. Mutation for accepting or rejecting
+  // 4. Mutation for updating status
   const updateStatusMutation = useMutation({
     mutationFn: async ({
       id,
@@ -168,15 +199,33 @@ export default function SellerOrders() {
         if (selectedRequest?.id === updated.id) {
           setSelectedRequest(updated);
         }
-        const actionWord = updated.status === 'confirmed' ? 'accepted' : 'declined';
+        let actionWord = 'Updated';
+        let detailMessage = `Order #${updated.id.slice(0, 8).toUpperCase()} status is now ${updated.status}.`;
+        if (updated.status === 'awaiting_payment') {
+          actionWord = 'Accepted';
+          detailMessage = `Request for ${updated.quantity}kg of ${updated.waste_type} accepted! Order is now awaiting buyer payment.`;
+        } else if (updated.status === 'ready_for_pickup') {
+          actionWord = 'Ready for Pickup';
+          detailMessage = `Order #${updated.id.slice(0, 8).toUpperCase()} marked ready for pickup.`;
+        } else if (updated.status === 'in_transit') {
+          actionWord = 'Dispatched';
+          detailMessage = `Order #${updated.id.slice(0, 8).toUpperCase()} is now in transit.`;
+        } else if (updated.status === 'delivered') {
+          actionWord = 'Delivered';
+          detailMessage = `Order #${updated.id.slice(0, 8).toUpperCase()} marked delivered! Reserved inventory has been fulfilled.`;
+        } else if (updated.status === 'cancelled') {
+          actionWord = 'Declined';
+          detailMessage = `Request has been declined/cancelled.`;
+        }
+
         addToast({
           type: 'success',
-          title: `Request ${actionWord.charAt(0).toUpperCase() + actionWord.slice(1)}`,
-          message: `Request for ${updated.quantity}kg of ${updated.waste_type} has been ${actionWord}.`,
+          title: `Order ${actionWord}`,
+          message: detailMessage,
         });
       }
       setActionConfirm(null);
-      setRejectionNote('');
+      setActionNote('');
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Failed to update request status';
@@ -191,8 +240,33 @@ export default function SellerOrders() {
   const handleConfirmAction = () => {
     if (!actionConfirm) return;
     const { type, request } = actionConfirm;
-    const targetStatus: RequestStatus = type === 'accept' ? 'confirmed' : 'cancelled';
-    const note = type === 'reject' ? (rejectionNote.trim() || 'Declined by seller') : 'Accepted by seller';
+    let targetStatus: RequestStatus;
+    let note = actionNote.trim();
+
+    switch (type) {
+      case 'accept':
+        targetStatus = 'awaiting_payment';
+        note = note || 'Accepted by seller - awaiting buyer payment';
+        break;
+      case 'reject':
+        targetStatus = 'cancelled';
+        note = note || 'Declined by seller';
+        break;
+      case 'ready_for_pickup':
+        targetStatus = 'ready_for_pickup';
+        note = note || 'Scrap weighed, packed, and ready for pickup';
+        break;
+      case 'in_transit':
+        targetStatus = 'in_transit';
+        note = note || 'Scrap dispatched / in transit to buyer';
+        break;
+      case 'delivered':
+        targetStatus = 'delivered';
+        note = note || 'Scrap delivery completed and verified';
+        break;
+      default:
+        return;
+    }
 
     updateStatusMutation.mutate({
       id: request.id,
@@ -231,7 +305,7 @@ export default function SellerOrders() {
       </div>
 
       {/* KPI Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="card-base p-4">
           <span className="text-xs text-muted-foreground block">Total Requests</span>
           <span className="text-xl font-bold text-foreground mt-1 block">
@@ -244,16 +318,28 @@ export default function SellerOrders() {
             {pendingCount}
           </span>
         </div>
+        <div className="card-base p-4 border-l-4 border-l-orange-500">
+          <span className="text-xs text-muted-foreground block">Awaiting Payment</span>
+          <span className="text-xl font-bold text-orange-600 dark:text-orange-400 mt-1 block">
+            {awaitingPaymentCount}
+          </span>
+        </div>
         <div className="card-base p-4 border-l-4 border-l-blue-500">
-          <span className="text-xs text-muted-foreground block">Confirmed Orders</span>
+          <span className="text-xs text-muted-foreground block">Confirmed</span>
           <span className="text-xl font-bold text-blue-600 dark:text-blue-400 mt-1 block">
             {confirmedCount}
+          </span>
+        </div>
+        <div className="card-base p-4 border-l-4 border-l-indigo-500">
+          <span className="text-xs text-muted-foreground block">Ready Pickup</span>
+          <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">
+            {readyForPickupCount}
           </span>
         </div>
         <div className="card-base p-4 border-l-4 border-l-emerald-500">
           <span className="text-xs text-muted-foreground block">Delivered</span>
           <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 block">
-            {allRequests.filter((r) => r.status === 'delivered').length}
+            {deliveredCount}
           </span>
         </div>
       </div>
@@ -457,6 +543,37 @@ export default function SellerOrders() {
                           <CheckCircle2 className="h-3.5 w-3.5" /> Accept Request
                         </button>
                       </>
+                    ) : req.status === 'confirmed' ? (
+                      <button
+                        onClick={() => setActionConfirm({ type: 'ready_for_pickup', request: req })}
+                        disabled={updateStatusMutation.isPending}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                        title="Mark scrap ready for pickup"
+                      >
+                        <PackageCheck className="h-3.5 w-3.5" /> Mark Ready for Pickup
+                      </button>
+                    ) : req.status === 'ready_for_pickup' ? (
+                      <button
+                        onClick={() => setActionConfirm({ type: 'in_transit', request: req })}
+                        disabled={updateStatusMutation.isPending}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-cyan-600 hover:bg-cyan-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                        title="Mark scrap in transit"
+                      >
+                        <Truck className="h-3.5 w-3.5" /> Mark In Transit
+                      </button>
+                    ) : req.status === 'in_transit' ? (
+                      <button
+                        onClick={() => setActionConfirm({ type: 'delivered', request: req })}
+                        disabled={updateStatusMutation.isPending}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-sm"
+                        title="Confirm delivery and fulfill inventory"
+                      >
+                        <Package className="h-3.5 w-3.5" /> Mark Delivered
+                      </button>
+                    ) : req.status === 'delivered' ? (
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Completed
+                      </span>
                     ) : null}
 
                     <button
@@ -644,8 +761,49 @@ export default function SellerOrders() {
               </div>
             )}
 
+            {/* Fulfillment Milestones if available */}
+            {(selectedRequest.ready_at || selectedRequest.dispatched_at || selectedRequest.delivered_at || selectedRequest.fulfillment_notes) && (
+              <div className="p-3.5 bg-secondary/20 rounded-xl border border-border/50 space-y-2">
+                <h5 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <PackageCheck className="h-3.5 w-3.5 text-primary" />
+                  Fulfillment Milestones
+                </h5>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  {selectedRequest.ready_at && (
+                    <div className="bg-card p-2 rounded border border-border/50">
+                      <span className="text-muted-foreground block text-[11px]">Ready for Pickup</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(selectedRequest.ready_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  )}
+                  {selectedRequest.dispatched_at && (
+                    <div className="bg-card p-2 rounded border border-border/50">
+                      <span className="text-muted-foreground block text-[11px]">Dispatched / In Transit</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(selectedRequest.dispatched_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  )}
+                  {selectedRequest.delivered_at && (
+                    <div className="bg-card p-2 rounded border border-border/50">
+                      <span className="text-muted-foreground block text-[11px]">Delivered & Fulfilled</span>
+                      <span className="font-semibold text-foreground">
+                        {new Date(selectedRequest.delivered_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {selectedRequest.fulfillment_notes && (
+                  <p className="text-xs text-muted-foreground italic">
+                    Notes: {selectedRequest.fulfillment_notes}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Modal Actions */}
-            <div className="border-t border-border pt-4 flex gap-3 justify-end">
+            <div className="border-t border-border pt-4 flex gap-3 justify-end flex-wrap items-center">
               {selectedRequest.status === 'pending' && (
                 <>
                   <button
@@ -668,6 +826,42 @@ export default function SellerOrders() {
                 </>
               )}
 
+              {selectedRequest.status === 'confirmed' && (
+                <button
+                  onClick={() => {
+                    setActionConfirm({ type: 'ready_for_pickup', request: selectedRequest });
+                  }}
+                  disabled={updateStatusMutation.isPending}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <PackageCheck className="h-4 w-4" /> Mark Ready for Pickup
+                </button>
+              )}
+
+              {selectedRequest.status === 'ready_for_pickup' && (
+                <button
+                  onClick={() => {
+                    setActionConfirm({ type: 'in_transit', request: selectedRequest });
+                  }}
+                  disabled={updateStatusMutation.isPending}
+                  className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Truck className="h-4 w-4" /> Mark In Transit
+                </button>
+              )}
+
+              {selectedRequest.status === 'in_transit' && (
+                <button
+                  onClick={() => {
+                    setActionConfirm({ type: 'delivered', request: selectedRequest });
+                  }}
+                  disabled={updateStatusMutation.isPending}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Package className="h-4 w-4" /> Mark Delivered
+                </button>
+              )}
+
               <button onClick={() => setSelectedRequest(null)} className="btn-secondary text-xs">
                 Close
               </button>
@@ -677,7 +871,7 @@ export default function SellerOrders() {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. Action Confirmation Modal (Accept / Reject)                           */}
+      {/* 2. Action Confirmation Modal (Accept / Reject / Fulfillment)              */}
       {/* ========================================================================= */}
       {actionConfirm && (
         <Modal
@@ -685,13 +879,19 @@ export default function SellerOrders() {
           onClose={() => {
             if (!updateStatusMutation.isPending) {
               setActionConfirm(null);
-              setRejectionNote('');
+              setActionNote('');
             }
           }}
           title={
             actionConfirm.type === 'accept'
               ? 'Accept Scrap Request'
-              : 'Decline Scrap Request'
+              : actionConfirm.type === 'reject'
+              ? 'Decline Scrap Request'
+              : actionConfirm.type === 'ready_for_pickup'
+              ? 'Mark Order Ready for Pickup'
+              : actionConfirm.type === 'in_transit'
+              ? 'Mark Order In Transit'
+              : 'Confirm Order Delivery'
           }
           size="sm"
         >
@@ -711,9 +911,9 @@ export default function SellerOrders() {
                   <strong className="text-foreground">
                     {formatCurrency(actionConfirm.request.amount)}
                   </strong>
-                  ?
+                  ? The order will be placed into "Awaiting Payment" status awaiting buyer checkout.
                 </>
-              ) : (
+              ) : actionConfirm.type === 'reject' ? (
                 <>
                   Are you sure you want to decline this request for{' '}
                   <strong className="text-foreground">
@@ -721,30 +921,53 @@ export default function SellerOrders() {
                   </strong>{' '}
                   of {actionConfirm.request.waste_type}?
                 </>
+              ) : actionConfirm.type === 'ready_for_pickup' ? (
+                <>
+                  Mark order <strong className="text-foreground">#{actionConfirm.request.id.slice(0, 8).toUpperCase()}</strong> as ready for collection?
+                  This confirms the scrap has been prepared and packed.
+                </>
+              ) : actionConfirm.type === 'in_transit' ? (
+                <>
+                  Mark order <strong className="text-foreground">#{actionConfirm.request.id.slice(0, 8).toUpperCase()}</strong> as dispatched/in transit?
+                  The buyer will see that their scrap is en route.
+                </>
+              ) : (
+                <>
+                  Mark order <strong className="text-foreground">#{actionConfirm.request.id.slice(0, 8).toUpperCase()}</strong> as delivered?
+                  This will finalize the order and atomically mark the reserved inventory as <strong>FULFILLED</strong>.
+                </>
               )}
             </p>
 
-            {actionConfirm.type === 'reject' && (
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1">
-                  Reason for Rejection (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={rejectionNote}
-                  onChange={(e) => setRejectionNote(e.target.value)}
-                  placeholder="e.g. Quantity committed to another buyer, pickup timeline mismatch..."
-                  className="input-base text-xs resize-none"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">
+                {actionConfirm.type === 'reject'
+                  ? 'Reason for Rejection (Optional)'
+                  : 'Fulfillment / Status Notes (Optional)'}
+              </label>
+              <textarea
+                rows={2}
+                value={actionNote}
+                onChange={(e) => setActionNote(e.target.value)}
+                placeholder={
+                  actionConfirm.type === 'reject'
+                    ? 'e.g. Quantity committed to another buyer...'
+                    : actionConfirm.type === 'ready_for_pickup'
+                    ? 'e.g. Packed in warehouse Bay 3, gate 2 pickup...'
+                    : actionConfirm.type === 'in_transit'
+                    ? 'e.g. Vehicle #KA-01-AB-1234, estimated delivery today...'
+                    : 'e.g. Verified by receiving supervisor, signed gate pass...'
+                }
+                className="input-base text-xs resize-none"
+              />
+            </div>
 
             <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => {
                   setActionConfirm(null);
-                  setRejectionNote('');
+                  setActionNote('');
                 }}
                 disabled={updateStatusMutation.isPending}
                 className="btn-secondary flex-1 text-xs"
@@ -758,7 +981,13 @@ export default function SellerOrders() {
                 className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
                   actionConfirm.type === 'accept'
                     ? 'btn-primary'
-                    : 'bg-rose-600 hover:bg-rose-700 text-white'
+                    : actionConfirm.type === 'reject'
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                    : actionConfirm.type === 'ready_for_pickup'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : actionConfirm.type === 'in_transit'
+                    ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                 }`}
               >
                 {updateStatusMutation.isPending ? (
@@ -769,9 +998,21 @@ export default function SellerOrders() {
                   <>
                     <CheckCircle2 className="h-3.5 w-3.5" /> Confirm Acceptance
                   </>
-                ) : (
+                ) : actionConfirm.type === 'reject' ? (
                   <>
                     <XCircle className="h-3.5 w-3.5" /> Confirm Rejection
+                  </>
+                ) : actionConfirm.type === 'ready_for_pickup' ? (
+                  <>
+                    <PackageCheck className="h-3.5 w-3.5" /> Mark Ready
+                  </>
+                ) : actionConfirm.type === 'in_transit' ? (
+                  <>
+                    <Truck className="h-3.5 w-3.5" /> Mark In Transit
+                  </>
+                ) : (
+                  <>
+                    <Package className="h-3.5 w-3.5" /> Confirm Delivery
                   </>
                 )}
               </button>

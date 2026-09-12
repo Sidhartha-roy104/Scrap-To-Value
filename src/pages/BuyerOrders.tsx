@@ -30,6 +30,7 @@ import {
   ArrowRight,
   ShieldCheck,
   CreditCard,
+  PackageCheck,
 } from 'lucide-react';
 import { WasteBadge } from '@/components/WasteBadge';
 import { WasteType, formatCurrency, formatNumber, formatRelativeTime } from '@/data/mockData';
@@ -37,12 +38,14 @@ import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
 import { MockCheckoutModal } from '@/components/MockCheckoutModal';
 
-type StatusFilter = 'All' | 'pending' | 'confirmed' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
+type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
 const FILTER_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'All', label: 'All Orders' },
   { key: 'pending', label: 'Pending Approval' },
+  { key: 'awaiting_payment', label: 'Awaiting Payment' },
   { key: 'confirmed', label: 'Confirmed' },
+  { key: 'ready_for_pickup', label: 'Ready for Pickup' },
   { key: 'in_transit', label: 'In Transit' },
   { key: 'delivered', label: 'Delivered' },
   { key: 'cancelled', label: 'Cancelled' },
@@ -57,11 +60,23 @@ export function getStatusBadge(status: RequestStatus) {
         className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
         icon: Clock,
       };
+    case 'awaiting_payment':
+      return {
+        label: 'Awaiting Payment',
+        className: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+        icon: Clock,
+      };
     case 'confirmed':
       return {
         label: 'Confirmed',
         className: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
         icon: CheckCircle2,
+      };
+    case 'ready_for_pickup':
+      return {
+        label: 'Ready for Pickup',
+        className: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',
+        icon: PackageCheck,
       };
     case 'in_transit':
       return {
@@ -97,7 +112,7 @@ export function getStatusBadge(status: RequestStatus) {
 }
 
 export function getPaymentBadge(payment?: CollectionRequest['payment'], orderStatus?: RequestStatus) {
-  if (payment?.status === 'SUCCEEDED' || (orderStatus && ['confirmed', 'in_transit', 'delivered'].includes(orderStatus) && payment?.status !== 'FAILED')) {
+  if (payment?.status === 'SUCCEEDED' || (orderStatus && ['confirmed', 'ready_for_pickup', 'in_transit', 'delivered'].includes(orderStatus) && payment?.status !== 'FAILED')) {
     return {
       label: 'Paid',
       className: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
@@ -125,7 +140,7 @@ export function getPaymentBadge(payment?: CollectionRequest['payment'], orderSta
       icon: AlertTriangle,
     };
   }
-  if (orderStatus === 'pending') {
+  if (orderStatus === 'awaiting_payment') {
     return {
       label: 'Payment Pending',
       className: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
@@ -135,10 +150,12 @@ export function getPaymentBadge(payment?: CollectionRequest['payment'], orderSta
   return null;
 }
 
-// Visual tracking steps
-const TRACKING_STEPS: { key: RequestStatus; label: string; icon: typeof Clock }[] = [
+// Visual tracking steps (6-stage progression)
+const TRACKING_STEPS: { key: RequestStatus; label: string; icon: typeof Clock | typeof PackageCheck }[] = [
   { key: 'pending', label: 'Pending Approval', icon: Clock },
+  { key: 'awaiting_payment', label: 'Awaiting Payment', icon: Clock },
   { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2 },
+  { key: 'ready_for_pickup', label: 'Ready for Pickup', icon: PackageCheck },
   { key: 'in_transit', label: 'In Transit', icon: Truck },
   { key: 'delivered', label: 'Delivered', icon: Package },
 ];
@@ -147,12 +164,16 @@ function getTrackingStepIndex(status: RequestStatus): number {
   switch (status) {
     case 'pending':
       return 0;
-    case 'confirmed':
+    case 'awaiting_payment':
       return 1;
-    case 'in_transit':
+    case 'confirmed':
       return 2;
-    case 'delivered':
+    case 'ready_for_pickup':
       return 3;
+    case 'in_transit':
+      return 4;
+    case 'delivered':
+      return 5;
     default:
       return -1;
   }
@@ -189,8 +210,16 @@ export default function BuyerOrders() {
     () => allRequests.filter(r => r.status === 'pending').length,
     [allRequests]
   );
+  const awaitingPaymentCount = useMemo(
+    () => allRequests.filter(r => r.status === 'awaiting_payment').length,
+    [allRequests]
+  );
   const confirmedCount = useMemo(
     () => allRequests.filter(r => r.status === 'confirmed').length,
+    [allRequests]
+  );
+  const readyForPickupCount = useMemo(
+    () => allRequests.filter(r => r.status === 'ready_for_pickup').length,
     [allRequests]
   );
   const inTransitCount = useMemo(
@@ -277,7 +306,7 @@ export default function BuyerOrders() {
       </div>
 
       {/* Quick Status KPI Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
         <div className="card-base p-4 flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
             <ShoppingBag className="h-5 w-5" />
@@ -299,12 +328,32 @@ export default function BuyerOrders() {
         </div>
 
         <div className="card-base p-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-600 dark:text-orange-400">
+            <Clock className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-medium">To Pay</p>
+            <p className="text-xl font-bold text-foreground">{awaitingPaymentCount}</p>
+          </div>
+        </div>
+
+        <div className="card-base p-4 flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
             <CheckCircle2 className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs text-muted-foreground font-medium">Confirmed</p>
             <p className="text-xl font-bold text-foreground">{confirmedCount}</p>
+          </div>
+        </div>
+
+        <div className="card-base p-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <PackageCheck className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-medium">Ready Pickup</p>
+            <p className="text-xl font-bold text-foreground">{readyForPickupCount}</p>
           </div>
         </div>
 
@@ -337,7 +386,9 @@ export default function BuyerOrders() {
             const isActive = activeFilter === tab.key;
             let count = allRequests.length;
             if (tab.key === 'pending') count = pendingCount;
+            else if (tab.key === 'awaiting_payment') count = awaitingPaymentCount;
             else if (tab.key === 'confirmed') count = confirmedCount;
+            else if (tab.key === 'ready_for_pickup') count = readyForPickupCount;
             else if (tab.key === 'in_transit') count = inTransitCount;
             else if (tab.key === 'delivered') count = deliveredCount;
             else if (tab.key === 'cancelled') count = cancelledCount;
@@ -448,7 +499,7 @@ export default function BuyerOrders() {
             const badge = getStatusBadge(req.status);
             const StatusIcon = badge.icon;
             const paymentBadge = getPaymentBadge(req.payment, req.status);
-            const isPayable = req.status === 'pending' && req.payment?.status !== 'SUCCEEDED';
+            const isPayable = req.status === 'awaiting_payment' && req.payment?.status !== 'SUCCEEDED';
             const listingTitle = req.listing?.title || `${req.waste_type} Scrap`;
             const sellerName = req.seller?.name || 'Seller';
             const sellerCompany = req.seller?.company;
@@ -558,7 +609,9 @@ export default function BuyerOrders() {
                 <div className="p-4 border-t border-border/80 bg-secondary/15 flex items-center justify-between gap-3">
                   <span className="text-xs text-muted-foreground truncate max-w-[140px] sm:max-w-[180px]">
                     {req.status === 'pending'
-                      ? (req.payment?.status === 'SUCCEEDED' ? 'Payment confirmed' : 'Payment pending')
+                      ? 'Waiting for seller review'
+                      : req.status === 'awaiting_payment'
+                      ? 'Accepted — Pay now'
                       : req.status === 'confirmed'
                       ? 'Confirmed & reserved'
                       : req.status === 'in_transit'
@@ -635,7 +688,7 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetai
   const badge = getStatusBadge(request.status);
   const StatusIcon = badge.icon;
   const paymentBadge = getPaymentBadge(request.payment, request.status);
-  const isPayable = request.status === 'pending' && request.payment?.status !== 'SUCCEEDED';
+  const isPayable = request.status === 'awaiting_payment' && request.payment?.status !== 'SUCCEEDED';
   const currentStep = getTrackingStepIndex(request.status);
 
   const listingTitle = request.listing?.title || `${request.waste_type} Scrap`;
@@ -704,9 +757,9 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetai
               </div>
             </div>
           ) : (
-            /* Normal 4-step Timeline */
+            /* 6-step Timeline */
             <div className="relative pt-2 pb-1">
-              <div className="grid grid-cols-4 gap-2 relative z-10">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 relative z-10">
                 {TRACKING_STEPS.map((step, idx) => {
                   const isCompleted = currentStep >= idx;
                   const isCurrent = currentStep === idx;
@@ -751,7 +804,7 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetai
               </div>
 
               {/* Connecting progress bar */}
-              <div className="absolute top-7 left-[12%] right-[12%] h-1 bg-border -z-0">
+              <div className="absolute top-7 left-[10%] right-[10%] h-1 bg-border -z-0">
                 <div
                   className="h-full bg-emerald-500 transition-all duration-500 rounded-full"
                   style={{
@@ -920,6 +973,47 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow }: OrderDetai
             </div>
           )}
         </div>
+
+        {/* Fulfillment Milestones Card */}
+        {(request.ready_at || request.dispatched_at || request.delivered_at || request.fulfillment_notes) && (
+          <div className="card-base p-4 bg-secondary/15 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <PackageCheck className="h-3.5 w-3.5 text-primary" />
+              Fulfillment Milestones
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              {request.ready_at && (
+                <div className="bg-card p-2.5 rounded-lg border border-border/50">
+                  <p className="text-muted-foreground">Ready for Pickup</p>
+                  <p className="font-semibold text-foreground mt-0.5">
+                    {new Date(request.ready_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
+                </div>
+              )}
+              {request.dispatched_at && (
+                <div className="bg-card p-2.5 rounded-lg border border-border/50">
+                  <p className="text-muted-foreground">Dispatched / In Transit</p>
+                  <p className="font-semibold text-foreground mt-0.5">
+                    {new Date(request.dispatched_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
+                </div>
+              )}
+              {request.delivered_at && (
+                <div className="bg-card p-2.5 rounded-lg border border-border/50">
+                  <p className="text-muted-foreground">Delivered & Completed</p>
+                  <p className="font-semibold text-foreground mt-0.5">
+                    {new Date(request.delivered_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                  </p>
+                </div>
+              )}
+            </div>
+            {request.fulfillment_notes && (
+              <p className="text-xs text-muted-foreground italic">
+                Notes: {request.fulfillment_notes}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Buyer Message if present */}
         {request.buyer_message && (

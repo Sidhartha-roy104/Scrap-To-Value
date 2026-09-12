@@ -160,9 +160,37 @@ async function updateRequestStatus(req, res, next) {
   }
 }
 
+/**
+ * GET /api/requests/:id/history
+ * Retrieves fulfillment activity audit history for a request.
+ */
+async function getFulfillmentHistory(req, res, next) {
+  try {
+    const history = await requestService.getFulfillmentHistory(
+      req.params.id,
+      req.user.id
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: { history },
+    });
+  } catch (err) {
+    const status = errorToStatus(err.code);
+    if (status < 500) {
+      return res.status(status).json({
+        success: false,
+        message: err.message,
+      });
+    }
+    next(err);
+  }
+}
+
 module.exports = {
   createRequest,
   getRequests,
   getRequestById,
   updateRequestStatus,
+  getFulfillmentHistory,
 };

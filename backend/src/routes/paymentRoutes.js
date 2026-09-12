@@ -23,5 +23,6 @@ router.post('/:id/mock-success', paymentController.processMockSuccess);
 router.post('/:id/mock-failure', paymentController.processMockFailure);
 router.post('/:id/cancel', paymentController.cancelPayment);
 router.post('/:id/refund', paymentController.processMockRefund);
+router.get('/:id/transactions', paymentController.getPaymentAuditLedger);
 
 module.exports = router;

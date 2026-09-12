@@ -40,6 +40,10 @@ function formatRequest(row) {
     delivery_otp: row.delivery_otp ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    ready_at: row.ready_at ?? null,
+    dispatched_at: row.dispatched_at ?? null,
+    delivered_at: row.delivered_at ?? null,
+    fulfillment_notes: row.fulfillment_notes ?? null,
     reservation: row.reservation_status
       ? {
           status: row.reservation_status,
@@ -383,7 +387,9 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
 
   const VALID_STATUSES = [
     'pending',
+    'awaiting_payment',
     'confirmed',
+    'ready_for_pickup',
     'in_transit',
     'delivered',
     'cancelled',
@@ -401,10 +407,19 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
     return existing;
   }
 
+  // Disallow direct cancellation of already delivered orders
+  if (status === 'cancelled' && existing.status === 'delivered') {
+    const err = new Error('Invalid status transition: Delivered orders cannot be cancelled directly.');
+    err.code = 'BAD_REQUEST';
+    throw err;
+  }
+
   const ALLOWED_TRANSITIONS = {
-    pending: ['confirmed', 'cancelled'],
-    confirmed: ['in_transit', 'cancelled'],
-    in_transit: ['delivered', 'disputed'],
+    pending: ['awaiting_payment', 'cancelled'],
+    awaiting_payment: ['confirmed', 'cancelled'],
+    confirmed: ['ready_for_pickup', 'cancelled'],
+    ready_for_pickup: ['in_transit', 'cancelled'],
+    in_transit: ['delivered'],
     delivered: ['disputed'],
     cancelled: [],
     disputed: ['cancelled', 'delivered'],
@@ -417,51 +432,114 @@ async function updateRequestStatus(id, userId, { status, note, estimated_deliver
     throw err;
   }
 
-  // 3. Inventory Reservation Transitions
-  if (status === 'cancelled') {
-    // Release reserved inventory back to available stock
-    await inventoryService.releaseInventory({
-      orderId: id,
-      actorId: userId,
-      note: note || `Order cancelled: ${existing.status} -> cancelled`,
-    });
-  } else if (status === 'delivered') {
-    // Mark reserved inventory as fulfilled
-    await inventoryService.fulfillInventory({
-      orderId: id,
-      actorId: userId,
-      note: note || 'Order delivered and fulfilled',
-    });
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // 3. Inventory Reservation Transitions
+    if (status === 'cancelled') {
+      // Release reserved inventory back to available stock
+      await inventoryService.releaseInventory({
+        orderId: id,
+        actorId: userId,
+        note: note || `Order cancelled: ${existing.status} -> cancelled`,
+        connection,
+      });
+    } else if (status === 'delivered') {
+      // Mark reserved inventory as fulfilled
+      await inventoryService.fulfillInventory({
+        orderId: id,
+        actorId: userId,
+        note: note || 'Order delivered and fulfilled',
+        connection,
+      });
+    }
+
+    // 4. Update request status & append tracking history
+    const currentTracking = Array.isArray(existing.tracking_updates)
+      ? existing.tracking_updates
+      : [];
+
+    const newTracking = [
+      ...currentTracking,
+      {
+        status,
+        timestamp: new Date().toISOString(),
+        note: note || `Status updated to ${status}`,
+      },
+    ];
+
+    const query = `
+      UPDATE collection_requests
+      SET status = ?,
+          tracking_updates = ?,
+          estimated_delivery = COALESCE(?, estimated_delivery),
+          ready_at = CASE WHEN ? = 'ready_for_pickup' AND ready_at IS NULL THEN NOW() ELSE ready_at END,
+          dispatched_at = CASE WHEN ? = 'in_transit' AND dispatched_at IS NULL THEN NOW() ELSE dispatched_at END,
+          delivered_at = CASE WHEN ? = 'delivered' AND delivered_at IS NULL THEN NOW() ELSE delivered_at END,
+          fulfillment_notes = COALESCE(?, fulfillment_notes)
+      WHERE id = ?
+    `;
+
+    await connection.execute(query, [
+      status,
+      JSON.stringify(newTracking),
+      estimated_delivery,
+      status,
+      status,
+      status,
+      note || null,
+      id,
+    ]);
+
+    // 5. Append-only activity history
+    const activityId = crypto.randomUUID();
+    await connection.execute(
+      `INSERT INTO order_fulfillment_activity (
+        id, request_id, previous_status, new_status, changed_by, actor_role, notes
+      ) VALUES (?, ?, ?, ?, ?, 'seller', ?)`,
+      [
+        activityId,
+        id,
+        existing.status,
+        status,
+        userId,
+        note || `Status transition: ${existing.status} -> ${status}`,
+      ]
+    );
+
+    await connection.commit();
+  } catch (err) {
+    await connection.rollback();
+    throw err;
+  } finally {
+    connection.release();
   }
 
-  // 4. Update request status & append tracking history
-  const currentTracking = Array.isArray(existing.tracking_updates)
-    ? existing.tracking_updates
-    : [];
-
-  const newTracking = [
-    ...currentTracking,
-    {
-      status,
-      timestamp: new Date().toISOString(),
-      note: note || `Status updated to ${status}`,
-    },
-  ];
-
-  const query = `
-    UPDATE collection_requests
-    SET status = ?, tracking_updates = ?, estimated_delivery = COALESCE(?, estimated_delivery)
-    WHERE id = ?
-  `;
-
-  await pool.execute(query, [
-    status,
-    JSON.stringify(newTracking),
-    estimated_delivery,
-    id,
-  ]);
-
   return getRequestById(id);
+}
+
+/**
+ * Retrieves fulfillment activity history for an order.
+ */
+async function getFulfillmentHistory(requestId, userId) {
+  const existing = await getRequestById(requestId);
+  if (existing.buyer_id !== userId && existing.seller_id !== userId) {
+    const err = new Error('Access denied to this request history.');
+    err.code = 'FORBIDDEN';
+    throw err;
+  }
+
+  const [rows] = await pool.execute(
+    `SELECT a.*, u.display_name as actor_name, u.role as user_role
+     FROM order_fulfillment_activity a
+     LEFT JOIN users u ON a.changed_by = u.id
+     WHERE a.request_id = ?
+     ORDER BY a.created_at ASC`,
+    [requestId]
+  );
+  return rows;
 }
 
 module.exports = {
@@ -469,4 +547,5 @@ module.exports = {
   getRequestById,
   getRequests,
   updateRequestStatus,
+  getFulfillmentHistory,
 };

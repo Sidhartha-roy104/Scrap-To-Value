@@ -26,6 +26,9 @@ router.get('/', requestController.getRequests);
 // GET /api/requests/:id — get single request details
 router.get('/:id', requestController.getRequestById);
 
+// GET /api/requests/:id/history — get request fulfillment history
+router.get('/:id/history', requestController.getFulfillmentHistory);
+
 // PATCH /api/requests/:id/status — update status
 router.patch('/:id/status', updateStatusRules, requestController.updateRequestStatus);
 
