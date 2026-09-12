@@ -94,6 +94,7 @@ function formatRequest(row) {
           email: row.seller_email,
           company: row.seller_company ?? null,
           phone: row.seller_phone ?? null,
+          is_verified: Boolean(row.seller_is_verified || row.seller_kyc_verified),
         }
       : undefined,
   };
@@ -277,7 +278,9 @@ async function getRequestById(id) {
       s.display_name as seller_name,
       s.email as seller_email,
       s.company_name as seller_company,
-      s.phone as seller_phone
+      s.phone as seller_phone,
+      s.is_verified as seller_is_verified,
+      s.kyc_verified as seller_kyc_verified
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
     LEFT JOIN inventory_reservations res ON r.id = res.order_id
@@ -362,7 +365,9 @@ async function getRequests({
       s.display_name as seller_name,
       s.email as seller_email,
       s.company_name as seller_company,
-      s.phone as seller_phone
+      s.phone as seller_phone,
+      s.is_verified as seller_is_verified,
+      s.kyc_verified as seller_kyc_verified
     FROM collection_requests r
     LEFT JOIN waste_listings l ON r.listing_id = l.id
     LEFT JOIN inventory_reservations res ON r.id = res.order_id

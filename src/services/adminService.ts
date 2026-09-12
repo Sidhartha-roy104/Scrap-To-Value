@@ -148,6 +148,7 @@ export interface AdminUser {
   company_address?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
+  is_verified?: boolean;
   kyc_verified: boolean;
   is_active: boolean;
   created_at: string;
@@ -236,6 +237,7 @@ export interface AdminSeller {
   address?: string | null;
   phone?: string | null;
   avatar_url?: string | null;
+  is_verified?: boolean;
   kyc_verified: boolean;
   kyc_notes?: string | null;
   is_active: boolean;
@@ -287,6 +289,7 @@ export interface AdminListing {
     name: string;
     email: string;
     company?: string | null;
+    is_verified?: boolean;
     kyc_verified: boolean;
   };
 }
@@ -442,9 +445,16 @@ export async function getAdminSellers(params?: {
 
 export async function updateSellerVerification(
   sellerId: string,
-  payload: { kyc_verified: boolean; kyc_notes?: string }
-): Promise<ApiResponse<{ seller: AdminSeller }>> {
-  return apiClient.patch(`/api/admin/sellers/${sellerId}/verify`, payload);
+  payload: { is_verified?: boolean; kyc_verified?: boolean; kyc_notes?: string }
+): Promise<ApiResponse<{ seller: AdminSeller; user: AdminUser }>> {
+  return apiClient.patch(`/api/admin/users/${sellerId}/verification`, payload);
+}
+
+export async function updateUserVerification(
+  userId: string,
+  payload: { is_verified: boolean; kyc_notes?: string }
+): Promise<ApiResponse<{ user: AdminUser; seller: AdminSeller }>> {
+  return apiClient.patch(`/api/admin/users/${userId}/verification`, payload);
 }
 
 export async function getAdminBuyers(params?: {

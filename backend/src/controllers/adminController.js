@@ -162,20 +162,29 @@ async function getSellers(req, res, next) {
 }
 
 /**
- * PATCH /api/admin/sellers/:id/verify
+ * PATCH /api/admin/users/:userId/verification
  */
-async function updateSellerVerification(req, res, next) {
+async function updateUserVerification(req, res, next) {
   try {
-    const { kyc_verified, kyc_notes } = req.body;
-    const updated = await adminService.updateSellerVerification(
-      req.params.id,
+    const { is_verified, kyc_verified, kyc_notes } = req.body;
+    const targetVal = is_verified !== undefined ? is_verified : kyc_verified;
+    if (targetVal !== undefined && typeof targetVal !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'is_verified must be a boolean (true or false)',
+      });
+    }
+
+    const updated = await adminService.updateUserVerification(
+      req.params.userId || req.params.id,
       req.user.id,
-      { kyc_verified, kyc_notes }
+      { is_verified: targetVal, kyc_verified: targetVal, kyc_notes }
     );
+
     return res.status(200).json({
       success: true,
-      message: `Seller verification status updated to ${kyc_verified ? 'VERIFIED' : 'UNVERIFIED'}`,
-      data: { seller: updated },
+      message: `Supplier verification status updated to ${updated.is_verified ? 'VERIFIED' : 'UNVERIFIED'}`,
+      data: { user: updated, seller: updated },
     });
   } catch (err) {
     const status = errorToStatus(err.code);
@@ -184,6 +193,13 @@ async function updateSellerVerification(req, res, next) {
     }
     next(err);
   }
+}
+
+/**
+ * PATCH /api/admin/sellers/:id/verify
+ */
+async function updateSellerVerification(req, res, next) {
+  return updateUserVerification(req, res, next);
 }
 
 /**
@@ -348,6 +364,7 @@ module.exports = {
   getUsers,
   getUserById,
   updateUserStatus,
+  updateUserVerification,
   getSellers,
   updateSellerVerification,
   getBuyers,

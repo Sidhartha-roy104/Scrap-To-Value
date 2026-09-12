@@ -93,6 +93,7 @@ export interface CollectionRequest {
     email: string;
     company?: string | null;
     phone?: string | null;
+    is_verified?: boolean;
   };
 }
 

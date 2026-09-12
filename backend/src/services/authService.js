@@ -26,7 +26,8 @@ function safeUser(row) {
     company_address: row.company_address ?? null,
     phone: row.phone ?? null,
     avatar_url: row.avatar_url ?? null,
-    kyc_verified: Boolean(row.kyc_verified),
+    is_verified: Boolean(row.is_verified || row.kyc_verified),
+    kyc_verified: Boolean(row.is_verified || row.kyc_verified),
     // Phase 13: Extended B2B business profile fields
     city: row.city ?? null,
     state: row.state ?? null,

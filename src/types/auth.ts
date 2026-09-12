@@ -24,6 +24,7 @@ export interface RRUser {
   company_address?: string | null;
   phone: string | null;
   avatar_url: string | null;
+  is_verified?: boolean;
   kyc_verified: boolean;
   created_at: string;
   // Phase 13: Extended B2B business profile fields

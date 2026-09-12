@@ -524,7 +524,8 @@ async function getAdminUsers({
       company_address: row.company_address,
       phone: row.phone,
       avatar_url: row.avatar_url,
-      kyc_verified: Boolean(row.kyc_verified),
+      is_verified: Boolean(row.is_verified || row.kyc_verified),
+      kyc_verified: Boolean(row.is_verified || row.kyc_verified),
       is_active: Boolean(row.is_active),
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -553,6 +554,7 @@ async function getAdminUserById(id) {
       u.company_address,
       u.phone,
       u.avatar_url,
+      u.is_verified,
       u.kyc_verified,
       u.is_active,
       u.created_at,
@@ -582,7 +584,8 @@ async function getAdminUserById(id) {
     company_address: row.company_address,
     phone: row.phone,
     avatar_url: row.avatar_url,
-    kyc_verified: Boolean(row.kyc_verified),
+    is_verified: Boolean(row.is_verified || row.kyc_verified),
+    kyc_verified: Boolean(row.is_verified || row.kyc_verified),
     is_active: Boolean(row.is_active),
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -631,9 +634,9 @@ async function getAdminSellers({ search, kycStatus, page = 1, limit = 20 } = {})
   }
 
   if (kycStatus === 'verified') {
-    conditions.push('u.kyc_verified = 1');
+    conditions.push('(u.is_verified = 1 OR u.kyc_verified = 1)');
   } else if (kycStatus === 'unverified') {
-    conditions.push('u.kyc_verified = 0');
+    conditions.push('(u.is_verified = 0 AND (u.kyc_verified = 0 OR u.kyc_verified IS NULL))');
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
@@ -657,6 +660,7 @@ async function getAdminSellers({ search, kycStatus, page = 1, limit = 20 } = {})
        u.company_address,
        u.phone,
        u.avatar_url,
+       u.is_verified,
        u.kyc_verified,
        u.kyc_notes,
        u.is_active,
@@ -683,7 +687,8 @@ async function getAdminSellers({ search, kycStatus, page = 1, limit = 20 } = {})
       address: r.company_address,
       phone: r.phone,
       avatar_url: r.avatar_url,
-      kyc_verified: Boolean(r.kyc_verified),
+      is_verified: Boolean(r.is_verified || r.kyc_verified),
+      kyc_verified: Boolean(r.is_verified || r.kyc_verified),
       kyc_notes: r.kyc_notes,
       is_active: Boolean(r.is_active),
       created_at: r.created_at,
@@ -701,52 +706,72 @@ async function getAdminSellers({ search, kycStatus, page = 1, limit = 20 } = {})
   };
 }
 
-async function updateSellerVerification(sellerId, adminId, { kyc_verified, kyc_notes }) {
+/**
+ * Updates supplier verification status (Phase 14).
+ * Rules:
+ *  - Only admins can update verification status.
+ *  - Only seller/supplier accounts can be verified.
+ */
+async function updateUserVerification(userId, adminId, { is_verified, kyc_verified, kyc_notes }) {
   const [rows] = await pool.execute(
-    `SELECT id, role, display_name FROM users WHERE id = ? AND role = 'seller' LIMIT 1`,
-    [sellerId]
+    `SELECT id, role, display_name, email FROM users WHERE id = ? LIMIT 1`,
+    [userId]
   );
 
   if (rows.length === 0) {
-    const err = new Error('Seller not found');
+    const err = new Error('User not found');
     err.code = 'NOT_FOUND';
     throw err;
   }
 
-  const verifiedVal = kyc_verified ? 1 : 0;
+  const user = rows[0];
+  if (user.role !== 'seller') {
+    const err = new Error('Only supplier/seller accounts can be verified');
+    err.code = 'BAD_REQUEST';
+    throw err;
+  }
+
+  const targetVerified = is_verified !== undefined ? Boolean(is_verified) : Boolean(kyc_verified);
+  const verifiedVal = targetVerified ? 1 : 0;
   const notesVal = kyc_notes !== undefined ? kyc_notes : null;
 
   await pool.execute(
     `UPDATE users 
-     SET kyc_verified = ?, 
+     SET is_verified = ?,
+         kyc_verified = ?, 
          kyc_notes = COALESCE(?, kyc_notes), 
          updated_at = NOW() 
      WHERE id = ?`,
-    [verifiedVal, notesVal, sellerId]
+    [verifiedVal, verifiedVal, notesVal, userId]
   );
 
   const [updated] = await pool.execute(
-    `SELECT id, email, display_name, company_name, kyc_verified, kyc_notes, is_active FROM users WHERE id = ?`,
-    [sellerId]
+    `SELECT id, email, display_name, company_name, is_verified, kyc_verified, kyc_notes, is_active FROM users WHERE id = ?`,
+    [userId]
   );
 
   // Trigger non-blocking notification to seller
   notificationService.createNotification({
-    recipientId: sellerId,
+    recipientId: userId,
     type: notificationService.NotificationTypes.SELLER_VERIFICATION_UPDATED,
-    title: 'Seller Verification Status Updated',
-    message: `Your seller verification status is now ${kyc_verified ? 'VERIFIED' : 'UNVERIFIED'}.${kyc_notes ? ' Note: ' + kyc_notes : ''}`,
+    title: 'Supplier Verification Status Updated',
+    message: `Your supplier verification status is now ${targetVerified ? 'VERIFIED' : 'UNVERIFIED'}.${kyc_notes ? ' Note: ' + kyc_notes : ''}`,
     link: '/dashboard',
     relatedEntityType: 'seller',
-    relatedEntityId: sellerId,
-    dedupKey: `seller:KYC:${sellerId}:${kyc_verified ? '1' : '0'}:${Date.now()}`,
+    relatedEntityId: userId,
+    dedupKey: `seller:KYC:${userId}:${targetVerified ? '1' : '0'}:${Date.now()}`,
   });
 
   return {
     ...updated[0],
+    is_verified: Boolean(updated[0].is_verified),
     kyc_verified: Boolean(updated[0].kyc_verified),
     is_active: Boolean(updated[0].is_active),
   };
+}
+
+async function updateSellerVerification(sellerId, adminId, { is_verified, kyc_verified, kyc_notes }) {
+  return updateUserVerification(sellerId, adminId, { is_verified, kyc_verified, kyc_notes });
 }
 
 /**
@@ -1564,6 +1589,7 @@ module.exports = {
   getAdminUsers,
   getAdminUserById,
   updateUserStatus,
+  updateUserVerification,
   // New platform operations & system services
   getAdminSellers,
   updateSellerVerification,

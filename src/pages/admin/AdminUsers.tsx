@@ -5,6 +5,7 @@ import {
   getAdminUsers,
   getAdminUserById,
   updateUserStatus,
+  updateUserVerification,
   type AdminUser,
 } from '@/services/adminService';
 import {
@@ -28,6 +29,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
+  CheckCircle2,
 } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { useToastNotification } from '@/components/ToastNotification';
@@ -95,6 +97,34 @@ export default function AdminUsers() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Failed to update user status';
+      addToast({
+        type: 'error',
+        title: 'Operation Failed',
+        message: msg,
+      });
+    },
+  });
+
+  // 4. Supplier Verification Mutation
+  const verifyMutation = useMutation({
+    mutationFn: async ({ userId, isVerified }: { userId: string; isVerified: boolean }) => {
+      const res = await updateUserVerification(userId, { is_verified: isVerified });
+      return res.data?.user;
+    },
+    onSuccess: (updated, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin_users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_sellers'] });
+      queryClient.invalidateQueries({ queryKey: ['admin_user_details', selectedUserId] });
+      addToast({
+        type: 'success',
+        title: 'Supplier Verification Updated',
+        message: `Supplier ${updated?.full_name || updated?.email || ''} is now marked as ${
+          vars.isVerified ? 'VERIFIED' : 'UNVERIFIED'
+        }.`,
+      });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Failed to update supplier verification';
       addToast({
         type: 'error',
         title: 'Operation Failed',
@@ -301,6 +331,21 @@ export default function AdminUsers() {
                             <Eye className="h-3.5 w-3.5" />
                           </button>
 
+                          {u.role === 'seller' && (
+                            <button
+                              onClick={() => verifyMutation.mutate({ userId: u.id, isVerified: !u.kyc_verified })}
+                              disabled={verifyMutation.isPending}
+                              className={`px-2 py-1 rounded text-[10px] font-semibold transition-colors ${
+                                u.kyc_verified
+                                  ? 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 border border-amber-500/20'
+                                  : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/20'
+                              }`}
+                              title={u.kyc_verified ? 'Revoke Verification' : 'Verify Supplier'}
+                            >
+                              {u.kyc_verified ? 'Unverify' : 'Verify'}
+                            </button>
+                          )}
+
                           {!isSelf && (
                             <button
                               onClick={() => setStatusToggleTarget(u)}
@@ -420,7 +465,35 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-border flex justify-end">
+              <div className="pt-2 border-t border-border flex items-center justify-between">
+                <div>
+                  {detailsData.role === 'seller' && (
+                    <button
+                      onClick={() => {
+                        verifyMutation.mutate({
+                          userId: detailsData.id,
+                          isVerified: !detailsData.kyc_verified,
+                        });
+                      }}
+                      disabled={verifyMutation.isPending}
+                      className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5 ${
+                        detailsData.kyc_verified
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 border border-amber-500/20'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      }`}
+                    >
+                      {detailsData.kyc_verified ? (
+                        <>
+                          <ShieldAlert className="h-3.5 w-3.5" /> Revoke Supplier Verification
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-3.5 w-3.5" /> Verify Supplier
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
                 <button
                   onClick={() => setSelectedUserId(null)}
                   className="btn-secondary text-xs px-4 py-2"

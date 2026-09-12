@@ -68,6 +68,7 @@ function formatListing(row, customBaseUrl) {
           company: row.seller_company ?? null,
           phone: row.seller_phone ?? null,
           avatar_url: row.seller_avatar ?? null,
+          is_verified: Boolean(row.seller_is_verified || row.seller_kyc_verified),
           avg_rating: row.seller_avg_rating !== undefined && row.seller_avg_rating !== null
             ? parseFloat(Number(row.seller_avg_rating).toFixed(1))
             : 0,
@@ -252,6 +253,8 @@ async function getListings({
       u.company_name as seller_company,
       u.phone as seller_phone,
       u.avatar_url as seller_avatar,
+      u.is_verified as seller_is_verified,
+      u.kyc_verified as seller_kyc_verified,
       (
         SELECT ROUND(COALESCE(AVG(r.rating), 0), 1)
         FROM reviews r
@@ -292,6 +295,8 @@ async function getListingById(id) {
       u.company_name as seller_company,
       u.phone as seller_phone,
       u.avatar_url as seller_avatar,
+      u.is_verified as seller_is_verified,
+      u.kyc_verified as seller_kyc_verified,
       (
         SELECT ROUND(COALESCE(AVG(r.rating), 0), 1)
         FROM reviews r

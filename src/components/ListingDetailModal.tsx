@@ -18,6 +18,7 @@ import {
   Phone,
   AlertCircle,
   Loader2,
+  ShieldCheck,
 } from 'lucide-react';
 import { Modal } from '@/components/Modal';
 import { ListingImage } from '@/components/ListingImage';
@@ -229,9 +230,15 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                 {listing.seller.name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supplier Company</span>
                   <span className="text-sm font-semibold text-foreground truncate">{listing.seller.name}</span>
+                  {listing.seller.is_verified && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      <ShieldCheck className="h-3 w-3" />
+                      Verified Supplier
+                    </span>
+                  )}
                 </div>
                 {listing.seller.company && (
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">

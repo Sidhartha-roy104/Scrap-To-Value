@@ -34,6 +34,9 @@ router.get('/users/:id', adminController.getUserById);
 // PATCH /api/admin/users/:id/status — Soft activate/deactivate user
 router.patch('/users/:id/status', adminController.updateUserStatus);
 
+// PATCH /api/admin/users/:userId/verification — Verify / unverify supplier user
+router.patch('/users/:userId/verification', adminController.updateUserVerification);
+
 // Sellers & Verification
 router.get('/sellers', adminController.getSellers);
 router.patch('/sellers/:id/verify', adminController.updateSellerVerification);

@@ -205,7 +205,15 @@ export function OrderReceiptModal({ request, viewerRole, onClose }: OrderReceipt
                   Scrap Supplier
                 </h3>
                 <div className="space-y-1 text-xs">
-                  <p className="font-semibold text-foreground text-sm">{supplierName}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="font-semibold text-foreground text-sm">{supplierName}</p>
+                    {request.seller?.is_verified && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        <ShieldCheck className="h-2.5 w-2.5" />
+                        Verified Supplier
+                      </span>
+                    )}
+                  </div>
                   {supplierCompany && <p className="text-muted-foreground">{supplierCompany}</p>}
                   {pickupLocation && (
                     <p className="text-muted-foreground flex items-center gap-1">
