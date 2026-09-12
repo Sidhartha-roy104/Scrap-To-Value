@@ -27,6 +27,12 @@ function safeUser(row) {
     phone: row.phone ?? null,
     avatar_url: row.avatar_url ?? null,
     kyc_verified: Boolean(row.kyc_verified),
+    // Phase 13: Extended B2B business profile fields
+    city: row.city ?? null,
+    state: row.state ?? null,
+    country: row.country ?? null,
+    company_type: row.company_type ?? null,
+    company_description: row.company_description ?? null,
     created_at: row.created_at,
   };
 }

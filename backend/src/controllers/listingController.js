@@ -82,26 +82,128 @@ async function createListing(req, res, next) {
  * GET /api/listings
  * Retrieves listings with optional filters.
  */
+/**
+ * GET /api/listings
+ * Retrieves listings with search, filters, sorting, and pagination.
+ */
 async function getListings(req, res, next) {
   try {
     const {
       waste_type,
+      category,
       location,
       status,
       search,
       user_id,
+      min_price,
+      max_price,
+      min_quantity,
+      sort,
       page,
       limit,
     } = req.query;
 
+    // 1. Validate search length
+    if (search !== undefined && search !== null) {
+      if (typeof search === 'string' && search.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Search query must not exceed 100 characters.',
+        });
+      }
+    }
+
+    // 2. Validate numeric min_price
+    let parsedMinPrice = undefined;
+    if (min_price !== undefined && min_price !== null && min_price !== '') {
+      const num = Number(min_price);
+      if (isNaN(num) || num < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum price must be a valid non-negative number.',
+        });
+      }
+      parsedMinPrice = num;
+    }
+
+    // 3. Validate numeric max_price
+    let parsedMaxPrice = undefined;
+    if (max_price !== undefined && max_price !== null && max_price !== '') {
+      const num = Number(max_price);
+      if (isNaN(num) || num < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Maximum price must be a valid non-negative number.',
+        });
+      }
+      parsedMaxPrice = num;
+    }
+
+    // 4. Validate numeric min_quantity
+    let parsedMinQuantity = undefined;
+    if (min_quantity !== undefined && min_quantity !== null && min_quantity !== '') {
+      const num = Number(min_quantity);
+      if (isNaN(num) || num < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Minimum quantity must be a valid non-negative number.',
+        });
+      }
+      parsedMinQuantity = num;
+    }
+
+    // 5. Validate page
+    let parsedPage = 1;
+    if (page !== undefined && page !== null && page !== '') {
+      const p = Number(page);
+      if (!Number.isInteger(p) || p < 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Page must be a positive integer greater than or equal to 1.',
+        });
+      }
+      parsedPage = p;
+    }
+
+    // 6. Validate limit
+    let parsedLimit = 12;
+    if (limit !== undefined && limit !== null && limit !== '') {
+      const l = Number(limit);
+      if (!Number.isInteger(l) || l < 1 || l > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Limit must be an integer between 1 and 100.',
+        });
+      }
+      parsedLimit = l;
+    }
+
+    // 7. Validate sort
+    const ALLOWED_SORTS = ['newest', 'price_asc', 'price_desc', 'quantity_desc'];
+    let selectedSort = 'newest';
+    if (sort !== undefined && sort !== null && sort !== '') {
+      if (!ALLOWED_SORTS.includes(sort)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid sort option "${sort}". Allowed values: ${ALLOWED_SORTS.join(', ')}.`,
+        });
+      }
+      selectedSort = sort;
+    }
+
     const result = await listingService.getListings({
       waste_type,
+      category,
       location,
       status: status !== undefined ? status : 'Available',
       search,
       user_id,
-      page: page ? parseInt(page, 10) : 1,
-      limit: limit ? parseInt(limit, 10) : 50,
+      min_price: parsedMinPrice,
+      max_price: parsedMaxPrice,
+      min_quantity: parsedMinQuantity,
+      sort: selectedSort,
+      page: parsedPage,
+      limit: parsedLimit,
     });
 
     return res.status(200).json({

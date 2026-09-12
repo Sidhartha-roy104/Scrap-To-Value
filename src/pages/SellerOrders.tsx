@@ -34,6 +34,8 @@ import { Modal } from '@/components/Modal';
 import { useToastNotification } from '@/components/ToastNotification';
 import { ListingImage } from '@/components/ListingImage';
 import { RaiseDisputeModal } from '@/components/RaiseDisputeModal';
+import { OrderReceiptModal } from '@/components/OrderReceiptModal';
+import { FileText } from 'lucide-react';
 
 type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
@@ -116,6 +118,7 @@ export default function SellerOrders() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRequest, setSelectedRequest] = useState<CollectionRequest | null>(null);
   const [disputeTargetRequest, setDisputeTargetRequest] = useState<CollectionRequest | null>(null);
+  const [receiptTargetRequest, setReceiptTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Confirmation action modals
   const [actionConfirm, setActionConfirm] = useState<{
@@ -886,6 +889,13 @@ export default function SellerOrders() {
                 </button>
               )}
 
+              <button
+                onClick={() => setReceiptTargetRequest(selectedRequest)}
+                className="px-3.5 py-2 rounded-lg border border-border bg-card hover:bg-secondary text-foreground text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <FileText className="h-3.5 w-3.5" /> Order Receipt
+              </button>
+
               <button onClick={() => setSelectedRequest(null)} className="btn-secondary text-xs">
                 Close
               </button>
@@ -1061,7 +1071,13 @@ export default function SellerOrders() {
           }}
         />
       )}
-
+      {receiptTargetRequest && (
+        <OrderReceiptModal
+          request={receiptTargetRequest}
+          viewerRole="seller"
+          onClose={() => setReceiptTargetRequest(null)}
+        />
+      )}
 
     </div>
   );

@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getCurrentUser } from '@/services/userService';
-import { supabase } from '@/integrations/supabase/client';
+import { getCurrentUser, updateCurrentUser } from '@/services/userService';
 import { useToastNotification } from '@/components/ToastNotification';
-import { User, Building2, Phone, MapPin, Camera, Loader2, Save, Star, ShieldCheck, Award, MessageSquare } from 'lucide-react';
+import {
+  User,
+  Building2,
+  Phone,
+  MapPin,
+  Loader2,
+  Save,
+  Star,
+  ShieldCheck,
+  Award,
+  MessageSquare,
+  Globe,
+  Info,
+  CheckCircle2,
+  Camera,
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useUserReviews } from '@/hooks/useRatings';
 
@@ -12,8 +26,48 @@ interface ProfileData {
   phone: string;
   company_name: string;
   company_address: string;
+  city: string;
+  state: string;
+  country: string;
+  company_type: string;
+  company_description: string;
   avatar_url: string;
 }
+
+const SUPPLIER_COMPANY_TYPES = [
+  'Manufacturing Company',
+  'Metal Fabrication',
+  'Automobile Company',
+  'Electronics Company',
+  'Construction Company',
+  'Factory / Industry',
+  'Warehouse / Logistics',
+  'Textile / Garments',
+  'Chemical Industry',
+  'Food Processing',
+  'Other Business (Scrap Generating)',
+];
+
+const BUYER_COMPANY_TYPES = [
+  'Recycling Company',
+  'Metal Foundry / Smelter',
+  'Metal Processing Company',
+  'Scrap Trading Company',
+  'Paper / Pulp Mill',
+  'Plastics Recycler',
+  'E-waste Processor',
+  'Secondary Raw Material Supplier',
+  'Other Buyer Business',
+];
+
+const STATES_OF_INDIA = [
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Delhi', 'Chandigarh', 'Puducherry',
+];
 
 export default function Profile() {
   const { user } = useAuth();
@@ -21,12 +75,16 @@ export default function Profile() {
   const { data: reviewData, isLoading: reviewsLoading } = useUserReviews(user?.id);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [profile, setProfile] = useState<ProfileData>({
     display_name: '',
     phone: '',
     company_name: '',
     company_address: '',
+    city: '',
+    state: '',
+    country: 'India',
+    company_type: '',
+    company_description: '',
     avatar_url: '',
   });
 
@@ -43,17 +101,28 @@ export default function Profile() {
           phone: data.phone || '',
           company_name: data.company_name || '',
           company_address: data.company_address || '',
+          city: data.city || '',
+          state: data.state || '',
+          country: data.country || 'India',
+          company_type: data.company_type || '',
+          company_description: data.company_description || '',
           avatar_url: data.avatar_url || '',
         });
       }
     } catch (err: unknown) {
       console.warn('[Profile] Could not fetch profile from /api/users/me:', err);
+      // Fallback to JWT-cached user data
       if (user) {
         setProfile({
           display_name: user.full_name || '',
           phone: user.phone || '',
           company_name: user.company_name || '',
           company_address: user.company_address || '',
+          city: user.city || '',
+          state: user.state || '',
+          country: user.country || 'India',
+          company_type: user.company_type || '',
+          company_description: user.company_description || '',
           avatar_url: user.avatar_url || '',
         });
       }
@@ -66,56 +135,25 @@ export default function Profile() {
     e.preventDefault();
     setSaving(true);
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        display_name: profile.display_name,
-        phone: profile.phone,
-        company_name: profile.company_name,
-        company_address: profile.company_address,
-      })
-      .eq('user_id', user!.id);
-
-    if (error) {
-      addToast({ type: 'error', title: 'Failed to update profile' });
-    } else {
+    try {
+      await updateCurrentUser({
+        display_name: profile.display_name.trim() || null,
+        phone: profile.phone.trim() || null,
+        company_name: profile.company_name.trim() || null,
+        company_address: profile.company_address.trim() || null,
+        city: profile.city.trim() || null,
+        state: profile.state.trim() || null,
+        country: profile.country.trim() || null,
+        company_type: profile.company_type.trim() || null,
+        company_description: profile.company_description.trim() || null,
+      });
       addToast({ type: 'success', title: 'Profile updated successfully!' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update profile';
+      addToast({ type: 'error', title: 'Update Failed', message: msg });
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-  };
-
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${user!.id}/avatar.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true });
-
-    if (uploadError) {
-      addToast({ type: 'error', title: 'Failed to upload avatar' });
-      setUploading(false);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath);
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('user_id', user!.id);
-
-    if (!updateError) {
-      setProfile(prev => ({ ...prev, avatar_url: publicUrl }));
-      addToast({ type: 'success', title: 'Avatar updated!' });
-    }
-    setUploading(false);
   };
 
   if (loading) {
@@ -128,19 +166,66 @@ export default function Profile() {
 
   const initials = profile.display_name
     ? profile.display_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'U';
+    : user?.email?.[0]?.toUpperCase() || 'U';
+
+  const isSupplier = user?.role === 'seller';
+  const isBuyer = user?.role === 'buyer';
+  const companyTypeOptions = isSupplier ? SUPPLIER_COMPANY_TYPES : BUYER_COMPANY_TYPES;
+
+  const roleLabel = isSupplier ? 'Supplier Company' : isBuyer ? 'Buyer Company' : 'Company';
+  const companyTypeLabel = isSupplier ? 'Business Type (Scrap Source)' : 'Business Type (Purchasing)';
+  const companyNamePlaceholder = isSupplier
+    ? 'e.g. Acme Manufacturing Pvt Ltd'
+    : 'e.g. Greentech Recyclers Pvt Ltd';
+  const addressLabel = isSupplier ? 'Facility / Pickup Address' : 'Business / Registered Address';
+  const addressPlaceholder = isSupplier
+    ? 'Factory address, industrial area, etc.'
+    : 'Registered office or processing facility address';
+
+  // Profile completeness indicator
+  const requiredFields = ['display_name', 'phone', 'company_name', 'company_type', 'city'];
+  const completedFields = requiredFields.filter(f => Boolean(profile[f as keyof ProfileData]));
+  const completionPct = Math.round((completedFields.length / requiredFields.length) * 100);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="max-w-2xl mx-auto p-6"
+      className="max-w-2xl mx-auto p-6 space-y-8"
     >
-      <h1 className="text-2xl font-bold text-foreground mb-6">My Profile</h1>
+      <h1 className="text-2xl font-bold text-foreground">Business Profile</h1>
 
-      {/* Avatar */}
-      <div className="flex items-center gap-5 mb-8">
-        <div className="relative group">
+      {/* Profile Completion Banner */}
+      {completionPct < 100 && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
+          <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              Profile {completionPct}% complete
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Complete your {roleLabel.toLowerCase()} profile to build trust with{' '}
+              {isSupplier ? 'purchasing companies' : 'suppliers'} on the marketplace.
+            </p>
+            <div className="mt-2 h-1.5 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${completionPct}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {completionPct === 100 && (
+        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+          <span className="text-sm font-medium">Profile complete — your business details are visible to trading partners.</span>
+        </div>
+      )}
+
+      {/* Avatar + Identity */}
+      <div className="flex items-center gap-5">
+        <div className="relative">
           {profile.avatar_url ? (
             <img
               src={profile.avatar_url}
@@ -152,110 +237,233 @@ export default function Profile() {
               <span className="text-xl font-bold text-primary">{initials}</span>
             </div>
           )}
-          <label className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-            {uploading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-white" />
-            ) : (
-              <Camera className="h-5 w-5 text-white" />
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarUpload}
-              className="hidden"
-              disabled={uploading}
-            />
-          </label>
+          {/* Avatar upload deferred — needs Node.js storage endpoint */}
+          <div className="absolute bottom-0 right-0 h-7 w-7 rounded-full bg-secondary border-2 border-background flex items-center justify-center opacity-40 cursor-not-allowed" title="Avatar upload coming soon">
+            <Camera className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
         </div>
         <div>
-          <p className="font-semibold text-foreground">{profile.display_name || 'Unnamed'}</p>
+          <p className="font-semibold text-foreground">{profile.display_name || 'Unnamed User'}</p>
           <p className="text-sm text-muted-foreground">{user?.email}</p>
+          <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+            isSupplier
+              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
+              : isBuyer
+              ? 'bg-primary/10 text-primary border-primary/20'
+              : 'bg-secondary text-muted-foreground border-border'
+          }`}>
+            <Building2 className="h-3 w-3" />
+            {isSupplier ? 'Scrap Supplier' : isBuyer ? 'Scrap Buyer' : 'Administrator'}
+          </span>
         </div>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSave} className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Display Name</label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={profile.display_name}
-                onChange={(e) => setProfile(p => ({ ...p, display_name: e.target.value }))}
-                className="input-base pl-10"
-                placeholder="Your name"
-              />
-            </div>
-          </div>
+      {/* Profile Form */}
+      <form onSubmit={handleSave} className="space-y-6">
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Phone</label>
-            <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
-                className="input-base pl-10"
-                placeholder="+91 9876543210"
-              />
+        {/* Section: Contact Person */}
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+            <User className="h-3.5 w-3.5" />
+            Contact Person
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Full Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={profile.display_name}
+                  onChange={(e) => setProfile(p => ({ ...p, display_name: e.target.value }))}
+                  className="input-base pl-10"
+                  placeholder="Contact person's full name"
+                  maxLength={100}
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Company Name</label>
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={profile.company_name}
-                onChange={(e) => setProfile(p => ({ ...p, company_name: e.target.value }))}
-                className="input-base pl-10"
-                placeholder="Your MSME name"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Company Address</label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={profile.company_address}
-                onChange={(e) => setProfile(p => ({ ...p, company_address: e.target.value }))}
-                className="input-base pl-10"
-                placeholder="City, Tamil Nadu"
-              />
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Business Phone
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) => setProfile(p => ({ ...p, phone: e.target.value }))}
+                  className="input-base pl-10"
+                  placeholder="+91 9876543210"
+                  maxLength={20}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Visible to {isSupplier ? 'buyers' : 'sellers'} after order confirmation.
+              </p>
             </div>
           </div>
         </div>
 
-        <button type="submit" disabled={saving} className="btn-primary">
+        {/* Section: Company Details */}
+        <div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+            <Building2 className="h-3.5 w-3.5" />
+            {roleLabel} Details
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Company Name
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={profile.company_name}
+                  onChange={(e) => setProfile(p => ({ ...p, company_name: e.target.value }))}
+                  className="input-base pl-10"
+                  placeholder={companyNamePlaceholder}
+                  maxLength={150}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                {companyTypeLabel}
+              </label>
+              <select
+                value={profile.company_type}
+                onChange={(e) => setProfile(p => ({ ...p, company_type: e.target.value }))}
+                className="input-base"
+              >
+                <option value="">Select business type</option>
+                {companyTypeOptions.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                City
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={profile.city}
+                  onChange={(e) => setProfile(p => ({ ...p, city: e.target.value }))}
+                  className="input-base pl-10"
+                  placeholder="City name"
+                  maxLength={100}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                State
+              </label>
+              <select
+                value={profile.state}
+                onChange={(e) => setProfile(p => ({ ...p, state: e.target.value }))}
+                className="input-base"
+              >
+                <option value="">Select state</option>
+                {STATES_OF_INDIA.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                Country
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={profile.country}
+                  onChange={(e) => setProfile(p => ({ ...p, country: e.target.value }))}
+                  className="input-base pl-10"
+                  placeholder="India"
+                  maxLength={100}
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                {addressLabel}
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <textarea
+                  value={profile.company_address}
+                  onChange={(e) => setProfile(p => ({ ...p, company_address: e.target.value }))}
+                  rows={2}
+                  className="input-base pl-10 resize-none"
+                  placeholder={addressPlaceholder}
+                  maxLength={500}
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-1.5">
+                About {isSupplier ? 'Your Business / Scrap Source' : 'Your Purchasing Company'}
+                <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+              </label>
+              <textarea
+                value={profile.company_description}
+                onChange={(e) => setProfile(p => ({ ...p, company_description: e.target.value }))}
+                rows={3}
+                className="input-base resize-none"
+                placeholder={
+                  isSupplier
+                    ? 'Describe your business, types of scrap generated, typical volumes, quality grades, etc.'
+                    : 'Describe your purchasing requirements, processing capabilities, materials of interest, etc.'
+                }
+                maxLength={500}
+              />
+              <p className="text-xs text-muted-foreground mt-1 text-right">
+                {profile.company_description.length}/500
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" disabled={saving} className="btn-primary w-full sm:w-auto">
           {saving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Saving...
+            </>
           ) : (
             <>
               <Save className="h-4 w-4 mr-2" />
-              Save Changes
+              Save Profile
             </>
           )}
         </button>
       </form>
 
-      {/* Marketplace Trust & Reputation (Seller Profile Only) */}
+      {/* Marketplace Trust & Reputation — Seller Only */}
       {user?.role === 'seller' && (
-        <div className="mt-10 pt-8 border-t border-border space-y-6">
+        <div className="pt-8 border-t border-border space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <Award className="h-5 w-5 text-amber-500" />
-                Marketplace Seller Reputation
+                Marketplace Supplier Reputation
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Public marketplace ratings and reviews earned from verified buyers after completed deliveries.
+                Public marketplace ratings earned from purchasing companies after completed scrap deliveries.
               </p>
             </div>
             {reviewData?.summary && reviewData.summary.reviewCount > 0 && (
@@ -273,7 +481,7 @@ export default function Profile() {
             </div>
           ) : reviewData && reviewData.summary.reviewCount > 0 ? (
             <div className="space-y-5">
-              {/* Score & Distribution Breakdown */}
+              {/* Score & Distribution */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 rounded-xl bg-secondary/30 border border-border">
                 <div className="flex flex-col items-center justify-center text-center p-2 sm:border-r border-border/60">
                   <span className="text-4xl font-extrabold text-foreground tracking-tight">
@@ -296,7 +504,6 @@ export default function Profile() {
                   </span>
                 </div>
 
-                {/* Star distribution bars */}
                 <div className="sm:col-span-2 space-y-1.5 justify-center flex flex-col">
                   {[5, 4, 3, 2, 1].map((starKey) => {
                     const count = reviewData.summary.distribution[starKey as keyof typeof reviewData.summary.distribution] || 0;
@@ -307,31 +514,23 @@ export default function Profile() {
                           {starKey} <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400 inline" />
                         </span>
                         <div className="flex-1 h-2 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-amber-400 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
+                          <div className="h-full bg-amber-400 rounded-full transition-all" style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="w-8 text-right text-[11px] text-muted-foreground">
-                          {count}
-                        </span>
+                        <span className="w-8 text-right text-[11px] text-muted-foreground">{count}</span>
                       </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Received Reviews List */}
+              {/* Recent Reviews */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <MessageSquare className="h-3.5 w-3.5" />
                   Recent Verified Buyer Reviews
                 </h3>
                 {reviewData.reviews.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="p-4 rounded-xl bg-card border border-border/70 space-y-2.5"
-                  >
+                  <div key={rev.id} className="p-4 rounded-xl bg-card border border-border/70 space-y-2.5">
                     <div className="flex items-start justify-between">
                       <div>
                         <div className="flex items-center gap-2">
@@ -339,9 +538,7 @@ export default function Profile() {
                             {rev.reviewer_name || 'Marketplace Buyer'}
                           </span>
                           {rev.reviewer_company && (
-                            <span className="text-[11px] text-muted-foreground">
-                              ({rev.reviewer_company})
-                            </span>
+                            <span className="text-[11px] text-muted-foreground">({rev.reviewer_company})</span>
                           )}
                           <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-secondary text-muted-foreground uppercase">
                             Buyer
@@ -352,9 +549,7 @@ export default function Profile() {
                             <Star
                               key={s}
                               className={`h-3.5 w-3.5 ${
-                                s <= rev.rating
-                                  ? 'fill-amber-400 text-amber-400'
-                                  : 'text-muted-foreground/30'
+                                s <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'
                               }`}
                             />
                           ))}
@@ -363,9 +558,7 @@ export default function Profile() {
                       </div>
                       <span className="text-[11px] text-muted-foreground">
                         {new Date(rev.created_at).toLocaleDateString('en-IN', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
+                          day: 'numeric', month: 'short', year: 'numeric',
                         })}
                       </span>
                     </div>
@@ -389,7 +582,7 @@ export default function Profile() {
               <ShieldCheck className="h-8 w-8 text-muted-foreground/50 mx-auto" />
               <p className="text-sm font-medium text-foreground">No marketplace reviews yet</p>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Once you complete and deliver scrap collection orders, buyers will be able to rate your service and build your public marketplace rating.
+                Once you complete and deliver scrap orders, buyers will be able to rate your service and build your public marketplace rating.
               </p>
             </div>
           )}

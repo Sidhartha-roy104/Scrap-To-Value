@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   IndianRupee,
-  ShoppingCart,
   Package,
   Clock,
   CheckCircle2,
@@ -11,6 +10,11 @@ import {
   ArrowRight,
   Eye,
   ShoppingBag,
+  CreditCard,
+  Star,
+  Building2,
+  PackageCheck,
+  AlertCircle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -51,26 +55,30 @@ export function BuyerDashboard() {
   // Summary Metrics
   const totalOrders = myRequests.length;
   const pendingRequests = useMemo(
-    () => myRequests.filter(r => r.status === 'pending').length,
+    () => myRequests.filter(r => r.status === 'pending'),
     [myRequests]
   );
-  const confirmedOrders = useMemo(
-    () => myRequests.filter(r => r.status === 'confirmed').length,
+  const awaitingPaymentOrders = useMemo(
+    () => myRequests.filter(r => r.status === 'awaiting_payment'),
+    [myRequests]
+  );
+  const inFulfillmentOrders = useMemo(
+    () => myRequests.filter(r => ['confirmed', 'ready_for_pickup', 'in_transit'].includes(r.status)),
     [myRequests]
   );
   const inTransitOrders = useMemo(
-    () => myRequests.filter(r => r.status === 'in_transit').length,
+    () => myRequests.filter(r => r.status === 'in_transit'),
     [myRequests]
   );
   const deliveredOrders = useMemo(
-    () => myRequests.filter(r => r.status === 'delivered').length,
+    () => myRequests.filter(r => r.status === 'delivered'),
     [myRequests]
   );
 
-  // Financial summary: total value of delivered + active orders
+  // Financial summary: total value of delivered + active orders (excluding cancelled)
   const totalSpent = useMemo(
     () => myRequests
-      .filter(r => r.status === 'delivered' || r.status === 'confirmed' || r.status === 'in_transit')
+      .filter(r => r.status === 'delivered' || r.status === 'confirmed' || r.status === 'ready_for_pickup' || r.status === 'in_transit')
       .reduce((acc, r) => acc + (r.amount || 0), 0),
     [myRequests]
   );
@@ -86,7 +94,7 @@ export function BuyerDashboard() {
     }
 
     myRequests
-      .filter(r => r.status !== 'cancelled')
+      .filter(r => r.status !== 'cancelled' && r.status !== 'disputed')
       .forEach(r => {
         const d = new Date(r.created_at);
         const key = monthNames[d.getMonth()];
@@ -98,20 +106,20 @@ export function BuyerDashboard() {
     return Object.entries(months).map(([month, spent]) => ({ month, spent }));
   }, [myRequests]);
 
-  // Latest 3-5 requests
+  // Latest 5 requests
   const recentOrders = useMemo(
     () => myRequests.slice(0, 5),
     [myRequests]
   );
 
-  const displayName = user?.full_name || user?.email || 'Buyer';
+  const displayName = user?.full_name || user?.company_name || user?.email || 'Purchasing Company';
 
   if (isLoading) {
     return (
       <div className="container-main py-8 space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Buyer Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Loading your activity...</p>
+          <h1 className="text-2xl font-semibold text-foreground">Scrap Buyer / Procurement Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Loading your procurement activity...</p>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
@@ -128,9 +136,9 @@ export function BuyerDashboard() {
       {/* Welcome Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">Buyer Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Scrap Buyer Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Welcome back, <strong className="text-foreground">{displayName}</strong>. Here is your scrap procurement overview.
+            Welcome back, <strong className="text-foreground">{displayName}</strong>. Here is your industrial scrap procurement overview.
           </p>
         </div>
 
@@ -139,59 +147,103 @@ export function BuyerDashboard() {
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm self-start sm:self-auto"
         >
           <ShoppingBag className="h-4 w-4" />
-          <span>Browse Marketplace</span>
+          <span>Browse Scrap Marketplace</span>
         </Link>
       </div>
 
-      {/* 5 Required Summary KPI Cards */}
+      {/* 5 Core Procurement KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
-          label="Total Orders"
+          label="Total Scrap Orders"
           value={formatNumber(totalOrders)}
-          icon={ShoppingCart}
+          icon={ShoppingBag}
           iconColor="text-primary"
           iconBgColor="bg-primary/10"
         />
         <StatCard
-          label="Pending Requests"
-          value={formatNumber(pendingRequests)}
-          icon={Clock}
+          label="Awaiting Payment"
+          value={formatNumber(awaitingPaymentOrders.length)}
+          icon={CreditCard}
           iconColor="text-amber-500"
           iconBgColor="bg-amber-500/10"
         />
         <StatCard
-          label="Confirmed Orders"
-          value={formatNumber(confirmedOrders)}
-          icon={CheckCircle2}
+          label="In Fulfillment"
+          value={formatNumber(inFulfillmentOrders.length)}
+          icon={PackageCheck}
           iconColor="text-blue-500"
           iconBgColor="bg-blue-500/10"
         />
         <StatCard
           label="In Transit"
-          value={formatNumber(inTransitOrders)}
+          value={formatNumber(inTransitOrders.length)}
           icon={Truck}
           iconColor="text-cyan-500"
           iconBgColor="bg-cyan-500/10"
         />
         <StatCard
-          label="Delivered"
-          value={formatNumber(deliveredOrders)}
+          label="Delivered Purchases"
+          value={formatNumber(deliveredOrders.length)}
           icon={Package}
           iconColor="text-emerald-500"
           iconBgColor="bg-emerald-500/10"
         />
       </div>
 
+      {/* Actionable Alerts for Buyer Workflows */}
+      {awaitingPaymentOrders.length > 0 && (
+        <div className="card-base p-4 bg-amber-500/10 border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <CreditCard className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-foreground">
+                {awaitingPaymentOrders.length} Order{awaitingPaymentOrders.length > 1 ? 's' : ''} Awaiting Payment
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Supplier companies have accepted your scrap purchase requests. Complete mock payment to confirm pickup and dispatch.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/orders"
+            className="btn-primary text-xs whitespace-nowrap self-end sm:self-auto bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            Pay Now
+          </Link>
+        </div>
+      )}
+
+      {deliveredOrders.length > 0 && (
+        <div className="card-base p-4 bg-emerald-500/5 border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-foreground">Delivered Scrap Eligible for Supplier Review</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                You have {deliveredOrders.length} delivered scrap acquisition{deliveredOrders.length > 1 ? 's' : ''}. Rate the supplier companies to help build verified B2B marketplace trust.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/orders"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground transition-colors inline-flex items-center gap-1.5 whitespace-nowrap self-end sm:self-auto"
+          >
+            <span>Review Suppliers</span>
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+
       {/* Spending Trend & Summary Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="card-base p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-semibold text-foreground">Procurement Spending Trend</h3>
+              <h3 className="text-base font-semibold text-foreground">Scrap Procurement Spending Trend</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Estimated order volume over the last 6 months</p>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 rounded bg-secondary text-foreground">
-              Total: {formatCurrency(totalSpent)}
+              Active & Delivered: {formatCurrency(totalSpent)}
             </span>
           </div>
 
@@ -218,7 +270,7 @@ export function BuyerDashboard() {
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '8px',
                     }}
-                    formatter={(value: number) => [formatCurrency(value), 'Spend']}
+                    formatter={(value: number) => [formatCurrency(value), 'Procurement Spend']}
                   />
                   <Bar dataKey="spent" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -226,7 +278,7 @@ export function BuyerDashboard() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground space-y-2">
                 <Package className="h-8 w-8 text-muted-foreground/50" />
-                <p>No order transactions yet. Discover materials in the marketplace to get started.</p>
+                <p>No scrap order transactions yet. Browse supplier listings in the marketplace to get started.</p>
               </div>
             )}
           </div>
@@ -236,7 +288,7 @@ export function BuyerDashboard() {
         <div className="card-base p-6 flex flex-col justify-between space-y-4">
           <div>
             <h3 className="text-base font-semibold text-foreground mb-1">Procurement Highlights</h3>
-            <p className="text-xs text-muted-foreground">Key health metrics for your account</p>
+            <p className="text-xs text-muted-foreground">Key health metrics for your purchasing account</p>
           </div>
 
           <div className="space-y-3">
@@ -246,7 +298,7 @@ export function BuyerDashboard() {
                   <IndianRupee className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground">Active Order Value</p>
+                  <p className="text-xs text-muted-foreground">Procurement Value</p>
                   <p className="text-sm font-bold text-foreground">{formatCurrency(totalSpent)}</p>
                 </div>
               </div>
@@ -259,7 +311,19 @@ export function BuyerDashboard() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Completed Deliveries</p>
-                  <p className="text-sm font-bold text-foreground">{deliveredOrders} orders</p>
+                  <p className="text-sm font-bold text-foreground">{deliveredOrders.length} orders</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-secondary/40 border border-border/50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="h-8 w-8 rounded bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pending Supplier Action</p>
+                  <p className="text-sm font-bold text-foreground">{pendingRequests.length} orders</p>
                 </div>
               </div>
             </div>
@@ -269,7 +333,7 @@ export function BuyerDashboard() {
             to="/orders"
             className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-semibold transition-colors"
           >
-            <span>Go to My Orders</span>
+            <span>Go to My Purchases</span>
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -279,14 +343,16 @@ export function BuyerDashboard() {
       <div className="card-base p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h3 className="text-base font-semibold text-foreground">Recent Orders</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Your latest scrap collection and procurement requests</p>
+            <h3 className="text-base font-semibold text-foreground">Recent Scrap Purchases</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Your latest scrap collection and procurement requests from supplier companies
+            </p>
           </div>
           <Link
             to="/orders"
             className="text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1.5"
           >
-            View All Orders <ArrowRight className="h-3.5 w-3.5" />
+            View All Purchases <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
@@ -294,7 +360,7 @@ export function BuyerDashboard() {
           <div className="py-10 text-center space-y-3">
             <Package className="h-10 w-10 text-muted-foreground/40 mx-auto" />
             <p className="text-sm text-muted-foreground">
-              No orders placed yet. Browse listings in the marketplace to create your first scrap request.
+              No orders placed yet. Browse listings in the marketplace to create your first scrap procurement request.
             </p>
             <Link
               to="/marketplace"
@@ -310,6 +376,7 @@ export function BuyerDashboard() {
               const badge = getStatusBadge(order.status);
               const StatusIcon = badge.icon;
               const title = order.listing?.title || `${order.waste_type} Scrap`;
+              const supplierDisplay = order.seller?.company || order.seller?.name || 'Supplier Company';
 
               return (
                 <div
@@ -333,10 +400,13 @@ export function BuyerDashboard() {
                         </span>
                         <WasteBadge type={order.waste_type as WasteType} size="sm" />
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>Requested: <strong className="text-foreground">{formatNumber(order.quantity)} kg</strong></span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1 text-foreground font-medium">
+                          <Building2 className="h-3 w-3 text-primary" />
+                          {supplierDisplay}
+                        </span>
                         <span>•</span>
-                        <span>Seller: {order.seller?.name || 'Seller'}</span>
+                        <span>Quantity: <strong className="text-foreground">{formatNumber(order.quantity)} kg</strong></span>
                         <span>•</span>
                         <span>{formatRelativeTime(order.created_at)}</span>
                       </div>

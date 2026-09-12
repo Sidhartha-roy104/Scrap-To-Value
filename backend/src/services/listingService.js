@@ -132,16 +132,21 @@ async function createListing({
 }
 
 /**
- * Retrieves listings with optional filters, search, and pagination.
+ * Retrieves listings with optional filters, search, sorting, and pagination.
  */
 async function getListings({
   waste_type,
+  category,
   location,
   status = 'Available',
   search,
   user_id,
+  min_price,
+  max_price,
+  min_quantity,
+  sort = 'newest',
   page = 1,
-  limit = 50,
+  limit = 12,
 } = {}) {
   const conditions = [];
   const params = [];
@@ -151,14 +156,15 @@ async function getListings({
     params.push(status);
   }
 
-  if (waste_type && waste_type !== 'All') {
+  const cat = category || waste_type;
+  if (cat && cat !== 'All') {
     conditions.push('l.waste_type = ?');
-    params.push(waste_type);
+    params.push(cat);
   }
 
-  if (location && location !== 'All') {
+  if (location && location !== 'All' && String(location).trim()) {
     conditions.push('l.location LIKE ?');
-    params.push(`%${location}%`);
+    params.push(`%${String(location).trim()}%`);
   }
 
   if (user_id) {
@@ -166,8 +172,23 @@ async function getListings({
     params.push(user_id);
   }
 
-  if (search && search.trim()) {
-    const s = `%${search.trim()}%`;
+  if (min_price !== undefined && min_price !== null && min_price !== '') {
+    conditions.push('l.price_per_kg >= ?');
+    params.push(parseFloat(min_price));
+  }
+
+  if (max_price !== undefined && max_price !== null && max_price !== '') {
+    conditions.push('l.price_per_kg <= ?');
+    params.push(parseFloat(max_price));
+  }
+
+  if (min_quantity !== undefined && min_quantity !== null && min_quantity !== '') {
+    conditions.push('l.available_quantity >= ?');
+    params.push(parseFloat(min_quantity));
+  }
+
+  if (search && String(search).trim()) {
+    const s = `%${String(search).trim()}%`;
     conditions.push('(l.title LIKE ? OR l.description LIKE ? OR l.location LIKE ? OR l.waste_type LIKE ?)');
     params.push(s, s, s, s);
   }
@@ -176,11 +197,23 @@ async function getListings({
 
   // Get total count
   const countQuery = `SELECT COUNT(*) as total FROM waste_listings l ${whereClause}`;
-  const [countResult] = await pool.execute(countQuery, params);
+  const [countResult] = await pool.query(countQuery, params);
   const total = countResult[0]?.total || 0;
 
+  // Safe sorting mapping
+  const SORT_MAP = {
+    newest: 'l.created_at DESC',
+    price_asc: 'l.price_per_kg ASC',
+    price_desc: 'l.price_per_kg DESC',
+    quantity_desc: 'l.available_quantity DESC',
+  };
+  const orderClause = SORT_MAP[sort] || SORT_MAP.newest;
+
   // Pagination
-  const offset = (Math.max(1, parseInt(page, 10)) - 1) * parseInt(limit, 10);
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 12));
+  const offset = (pageNum - 1) * limitNum;
+
   const query = `
     SELECT 
       l.*,
@@ -201,19 +234,19 @@ async function getListings({
     FROM waste_listings l
     LEFT JOIN users u ON l.user_id = u.id
     ${whereClause}
-    ORDER BY l.created_at DESC
+    ORDER BY ${orderClause}
     LIMIT ? OFFSET ?
   `;
 
-  // Note: mysql2 execute with LIMIT/OFFSET expects strings or numbers in query()
-  const [rows] = await pool.query(query, [...params, parseInt(limit, 10), offset]);
+  // Note: mysql2 query with LIMIT/OFFSET expects strings or numbers
+  const [rows] = await pool.query(query, [...params, limitNum, offset]);
 
   return {
     listings: rows.map((row) => formatListing(row)),
     total,
-    page: parseInt(page, 10),
-    limit: parseInt(limit, 10),
-    totalPages: Math.ceil(total / limit),
+    page: pageNum,
+    limit: limitNum,
+    totalPages: Math.ceil(total / limitNum) || 1,
   };
 }
 

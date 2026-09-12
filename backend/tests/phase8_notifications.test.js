@@ -376,6 +376,9 @@ async function runTests() {
     );
     assert('Seller accepts request -> awaiting_payment (200 OK)', acceptRes.status === 200);
 
+    // Wait 100ms for non-blocking notification persistence
+    await new Promise((r) => setTimeout(r, 100));
+
     const buyerAfterAccept = await req('/api/notifications?limit=10', 'GET', null, buyerToken);
     const buyerNotifs = buyerAfterAccept.body.data?.notifications || [];
     const acceptedNotif = buyerNotifs.find(

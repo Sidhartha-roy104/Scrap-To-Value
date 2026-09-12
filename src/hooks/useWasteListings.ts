@@ -174,3 +174,24 @@ export function useWasteListings() {
     isAdding: addMutation.isPending,
   };
 }
+
+/**
+ * Hook for server-side marketplace listing discovery with search, filters, sorting, and pagination.
+ */
+export function useMarketplaceListings(filters: ListingFilters) {
+  return useQuery({
+    queryKey: ['marketplace_listings', filters],
+    queryFn: async () => {
+      const res = await getListings({
+        ...filters,
+        status: 'Available',
+      });
+      if (!res.success || !res.data) {
+        throw new Error(res.message || 'Failed to fetch marketplace listings');
+      }
+      return res.data;
+    },
+    staleTime: 1000 * 15,
+  });
+}
+

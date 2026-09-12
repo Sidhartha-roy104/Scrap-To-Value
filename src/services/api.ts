@@ -42,10 +42,17 @@ export interface ApiResponse<T = unknown> {
   error?: string;
 }
 
-export interface ApiError {
+export class ApiError extends Error {
   status: number;
-  message: string;
   details?: unknown;
+
+  constructor(status: number, message: string, details?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.details = details;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +87,8 @@ async function request<T>(
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    const error: ApiError = {
-      status: response.status,
-      message: body.message ?? response.statusText,
-      details: body,
-    };
-    throw error;
+    const message = body.message || body.error || response.statusText || 'An API error occurred';
+    throw new ApiError(response.status, message, body);
   }
 
   return response.json() as Promise<T>;

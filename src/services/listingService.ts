@@ -55,11 +55,16 @@ export interface UpdateListingPayload extends Partial<CreateListingPayload> {}
 
 export interface ListingFilters {
   search?: string;
+  category?: string;
   wasteType?: string;
   waste_type?: string;
   location?: string;
   priceMin?: number;
   priceMax?: number;
+  min_price?: number;
+  max_price?: number;
+  min_quantity?: number;
+  sort?: 'newest' | 'price_asc' | 'price_desc' | 'quantity_desc';
   status?: string;
   user_id?: string;
   page?: number;
@@ -100,17 +105,29 @@ export function resolveImageUrl(url?: string | null): string | null {
 
 /**
  * GET /api/listings
- * Retrieves listings with optional filters.
+ * Retrieves listings with search, filters, sorting, and pagination.
  */
 export async function getListings(
   filters?: ListingFilters,
 ): Promise<ApiResponse<PaginatedListings>> {
   const params = new URLSearchParams();
 
-  if (filters?.search) params.append('search', filters.search);
-  const wt = filters?.wasteType || filters?.waste_type;
-  if (wt && wt !== 'All') params.append('waste_type', wt);
+  if (filters?.search && filters.search.trim()) params.append('search', filters.search.trim());
+  const cat = filters?.category || filters?.wasteType || filters?.waste_type;
+  if (cat && cat !== 'All') params.append('category', cat);
   if (filters?.location && filters.location !== 'All') params.append('location', filters.location);
+  
+  const minP = filters?.min_price !== undefined ? filters.min_price : filters?.priceMin;
+  if (minP !== undefined && minP !== null && !isNaN(minP)) params.append('min_price', String(minP));
+
+  const maxP = filters?.max_price !== undefined ? filters.max_price : filters?.priceMax;
+  if (maxP !== undefined && maxP !== null && !isNaN(maxP)) params.append('max_price', String(maxP));
+
+  if (filters?.min_quantity !== undefined && filters.min_quantity !== null && !isNaN(filters.min_quantity)) {
+    params.append('min_quantity', String(filters.min_quantity));
+  }
+
+  if (filters?.sort) params.append('sort', filters.sort);
   if (filters?.status && filters.status !== 'All') params.append('status', filters.status);
   if (filters?.user_id) params.append('user_id', filters.user_id);
   if (filters?.page) params.append('page', String(filters.page));

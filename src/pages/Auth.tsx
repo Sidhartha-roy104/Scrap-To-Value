@@ -119,7 +119,7 @@ export default function Auth() {
             {isSignUp ? 'Create your account' : 'Welcome back'}
           </h1>
           <p className="text-muted-foreground mb-8">
-            {isSignUp ? 'Start trading industrial waste today' : 'Sign in to your account'}
+            {isSignUp ? 'Connect supplier industries with scrap purchasing companies' : 'Sign in to your account'}
           </p>
 
           {/* Google OAuth — disabled in Phase 2 */}
@@ -172,12 +172,12 @@ export default function Auth() {
 
                 {/* Role Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">I want to</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">Company Role</label>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setSelectedRole('seller')}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-center ${
                         selectedRole === 'seller'
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-muted-foreground'
@@ -185,16 +185,16 @@ export default function Auth() {
                     >
                       <Store className={`h-6 w-6 ${selectedRole === 'seller' ? 'text-primary' : 'text-muted-foreground'}`} />
                       <span className={`text-sm font-medium ${selectedRole === 'seller' ? 'text-primary' : 'text-foreground'}`}>
-                        Sell Waste
+                        Supplier Company
                       </span>
-                      <span className="text-xs text-muted-foreground text-center">
-                        List & sell your industrial waste
+                      <span className="text-xs text-muted-foreground">
+                        Industry, factory, or generator selling scrap
                       </span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedRole('buyer')}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all text-center ${
                         selectedRole === 'buyer'
                           ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-muted-foreground'
@@ -202,10 +202,10 @@ export default function Auth() {
                     >
                       <ShoppingCart className={`h-6 w-6 ${selectedRole === 'buyer' ? 'text-primary' : 'text-muted-foreground'}`} />
                       <span className={`text-sm font-medium ${selectedRole === 'buyer' ? 'text-primary' : 'text-foreground'}`}>
-                        Buy Waste
+                        Purchasing Company
                       </span>
-                      <span className="text-xs text-muted-foreground text-center">
-                        Purchase recycled materials
+                      <span className="text-xs text-muted-foreground">
+                        Recycler, processor, or foundry buying scrap
                       </span>
                     </button>
                   </div>

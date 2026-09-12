@@ -80,7 +80,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
     try {
       await addListing({
         waste_type: data.wasteType,
-        title: `${data.wasteType} Waste - ${data.quantity}kg`,
+        title: `${data.wasteType} Scrap - ${data.quantity}kg`,
         quantity: Number(data.quantity),
         unit: 'kg',
         price_per_kg: Number(data.pricePerKg),
@@ -92,7 +92,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
       addToast({
         type: 'success',
         title: 'Listing Created Successfully',
-        message: 'Your waste listing is now published and active on the buyer marketplace.',
+        message: 'Your scrap material listing is now published and active on the buyer marketplace.',
       });
 
       reset();
@@ -115,7 +115,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
     <Modal
       isOpen={isOpen}
       onClose={handleModalClose}
-      title="Create New Scrap Listing"
+      title="Post New Scrap Material Listing"
       size="lg"
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -128,9 +128,9 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Waste Category *</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Scrap Material Category *</label>
             <select
-              {...register('wasteType', { required: 'Waste type is required' })}
+              {...register('wasteType', { required: 'Scrap category is required' })}
               className="input-base"
               disabled={isAdding}
             >
@@ -145,7 +145,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Quantity (kg) *</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Available Quantity (kg) *</label>
             <input
               type="number"
               step="any"
@@ -179,7 +179,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Location *</label>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Supplier Facility Location *</label>
             <select
               {...register('location', { required: 'Location is required' })}
               className="input-base"
@@ -206,7 +206,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
 
         {/* Image Upload */}
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1.5">Listing Image (optional)</label>
+          <label className="block text-sm font-medium text-foreground mb-1.5">Material Image (optional)</label>
           <input
             ref={fileInputRef}
             type="file"
@@ -235,18 +235,18 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
               className="w-full h-28 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-secondary/30 transition-colors cursor-pointer disabled:opacity-50"
             >
               <ImagePlus className="h-6 w-6 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Click to upload material image</span>
+              <span className="text-sm text-muted-foreground">Click to upload scrap material photo</span>
               <span className="text-xs text-muted-foreground">PNG, JPG up to 5MB</span>
             </button>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1.5">Description *</label>
+          <label className="block text-sm font-medium text-foreground mb-1.5">Material Description & Specifications *</label>
           <textarea
             {...register('description', { required: 'Description is required' })}
             rows={3}
-            placeholder="Describe the material condition, packaging, pickup instructions..."
+            placeholder="Describe scrap specifications, industrial source, grade, packaging, pickup instructions..."
             className="input-base resize-none"
             disabled={isAdding}
           />
@@ -270,10 +270,10 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
             {isAdding ? (
               <>
                 <Spinner size="sm" />
-                Publishing Listing...
+                Publishing Scrap Listing...
               </>
             ) : (
-              'Publish Listing'
+              'Publish Scrap Listing'
             )}
           </button>
         </div>

@@ -99,6 +99,18 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
       return;
     }
 
+    if (user.role !== 'buyer') {
+      const roleLabel = user.role === 'admin' ? 'Platform Administrator' : 'Supplier Company';
+      const msg = `Access denied: Logged in as ${roleLabel}. Only registered purchasing companies can submit procurement requests.`;
+      setErrorMessage(msg);
+      addToast({
+        type: 'error',
+        title: 'Action Not Allowed',
+        message: msg,
+      });
+      return;
+    }
+
     if (!isQuantityValid) return;
 
     setIsSubmitting(true);
@@ -115,18 +127,22 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
       addToast({
         type: 'success',
         title: 'Request Sent',
-        message: `Your request for ${numQty} ${listing.unit || 'kg'} of ${listing.waste_type} scrap is now pending seller approval.`,
+        message: `Your request for ${numQty} ${listing.unit || 'kg'} of ${listing.waste_type} scrap is now pending supplier approval.`,
       });
 
-      // Invalidate requests cache if buyer/seller has request lists
+      // Invalidate requests and listing caches
+      queryClient.invalidateQueries({ queryKey: ['buyer_requests'] });
+      queryClient.invalidateQueries({ queryKey: ['seller_requests'] });
       queryClient.invalidateQueries({ queryKey: ['collection_requests'] });
+      queryClient.invalidateQueries({ queryKey: ['waste_listings'] });
+      queryClient.invalidateQueries({ queryKey: ['waste_listing', listing.id] });
 
       // Automatically close after a short delay
       setTimeout(() => {
         handleClose();
       }, 2000);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Failed to submit request';
+      const msg = (err as any)?.message || (err instanceof Error ? err.message : 'Failed to submit request');
       setErrorMessage(msg);
       addToast({
         type: 'error',
@@ -139,7 +155,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Listing Details" size="lg">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Scrap Material Details" size="lg">
       <div className="space-y-6">
         {/* Listing Image */}
         <ListingImage
@@ -202,7 +218,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
           </div>
         </div>
 
-        {/* Seller Info (if available from API) */}
+        {/* Supplier Info (if available from API) */}
         {listing.seller && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-secondary/30 border border-border/60">
             <div className="flex items-center gap-3">
@@ -211,7 +227,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seller</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Supplier Company</span>
                   <span className="text-sm font-semibold text-foreground truncate">{listing.seller.name}</span>
                 </div>
                 {listing.seller.company && (
@@ -254,7 +270,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
         {/* Owner Actions */}
         {isOwner && (
           <div className="border-t border-border pt-4">
-            <p className="text-xs text-muted-foreground mb-3 italic">You are the seller of this listing.</p>
+            <p className="text-xs text-muted-foreground mb-3 italic">You are the supplier of this scrap listing.</p>
             <div className="flex gap-3">
               {listing.status === 'Available' && (
                 <button
@@ -313,7 +329,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                     Request Submitted Successfully!
                   </p>
                   <p className="text-xs text-emerald-700 dark:text-emerald-400">
-                    Status is <span className="font-semibold uppercase tracking-wider">pending</span>. The seller will review your request.
+                    Status is <span className="font-semibold uppercase tracking-wider">pending</span>. The supplier company will review your request.
                   </p>
                 </div>
               </div>
@@ -321,7 +337,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
               <form onSubmit={handleSubmitRequest} className="space-y-4 bg-secondary/30 p-4 rounded-xl border border-border/60">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                    <Send className="h-4 w-4 text-primary" /> Request Scrap Quantity
+                    <Send className="h-4 w-4 text-primary" /> Request Scrap Procurement Quantity
                   </h4>
                   <button
                     type="button"
@@ -378,7 +394,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                       {formatCurrency(calculatedTotal)}
                     </span>
                     <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                      Pending seller approval
+                      Pending supplier approval
                     </span>
                   </div>
                 </div>
@@ -386,12 +402,12 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                 {/* Optional Buyer Message */}
                 <div>
                   <label className="block text-xs font-medium text-foreground mb-1.5">
-                    Optional Message to Seller
+                    Optional Message to Supplier Company
                   </label>
                   <textarea
                     value={buyerMessage}
                     onChange={(e) => setBuyerMessage(e.target.value)}
-                    placeholder="Add notes about pickup schedule, transportation, or questions for the seller..."
+                    placeholder="Add notes about pickup schedule, transportation, or specifications for the supplier..."
                     rows={3}
                     maxLength={1000}
                     className="input-base text-sm resize-none"
@@ -430,9 +446,9 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
             ) : (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-foreground">Interested in this material?</p>
+                  <p className="text-sm font-semibold text-foreground">Interested in this scrap material?</p>
                   <p className="text-xs text-muted-foreground">
-                    Submit a collection request for the quantity you need.
+                    Submit a procurement request for the quantity required by your operations.
                   </p>
                 </div>
                 {listing.status !== 'Available' ? (
@@ -443,9 +459,9 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                   <button disabled className="btn-secondary opacity-70 cursor-not-allowed text-destructive border-destructive/30 bg-destructive/5 font-semibold text-xs px-3 py-2 rounded-lg">
                     Out of Stock / Fully Reserved
                   </button>
-                ) : user.role === 'seller' ? (
-                  <div className="text-xs text-muted-foreground bg-secondary/50 px-3 py-2 rounded-lg text-right">
-                    Logged in as Seller. (Only buyers can request listings)
+                ) : !isBuyer ? (
+                  <div className="text-xs text-muted-foreground bg-secondary/50 px-3 py-2 rounded-lg text-right border border-border/40">
+                    Logged in as <strong className="text-foreground">{user.role === 'admin' ? 'Platform Administrator' : 'Supplier Company'}</strong>. (Only purchasing companies can submit procurement requests)
                   </div>
                 ) : (
                   <button
@@ -453,7 +469,7 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
                     className="btn-primary gap-2 w-full sm:w-auto"
                   >
                     <Send className="h-4 w-4" />
-                    Request Scrap
+                    Procure Scrap
                   </button>
                 )}
               </div>

@@ -40,6 +40,8 @@ import { ListingImage } from '@/components/ListingImage';
 import { MockCheckoutModal } from '@/components/MockCheckoutModal';
 import { RaiseDisputeModal } from '@/components/RaiseDisputeModal';
 import { LeaveReviewModal } from '@/components/LeaveReviewModal';
+import { OrderReceiptModal } from '@/components/OrderReceiptModal';
+import { FileText } from 'lucide-react';
 
 type StatusFilter = 'All' | 'pending' | 'awaiting_payment' | 'confirmed' | 'ready_for_pickup' | 'in_transit' | 'delivered' | 'cancelled' | 'disputed';
 
@@ -190,6 +192,7 @@ export default function BuyerOrders() {
   const [paymentTargetRequest, setPaymentTargetRequest] = useState<CollectionRequest | null>(null);
   const [disputeTargetRequest, setDisputeTargetRequest] = useState<CollectionRequest | null>(null);
   const [reviewTargetRequest, setReviewTargetRequest] = useState<CollectionRequest | null>(null);
+  const [receiptTargetRequest, setReceiptTargetRequest] = useState<CollectionRequest | null>(null);
 
   // Fetch buyer requests from backend
   const {
@@ -676,6 +679,9 @@ export default function BuyerOrders() {
           onReview={(target) => {
             setReviewTargetRequest(target);
           }}
+          onViewReceipt={(target) => {
+            setReceiptTargetRequest(target);
+          }}
         />
       )}
 
@@ -723,6 +729,15 @@ export default function BuyerOrders() {
           }}
         />
       )}
+
+      {/* Order Receipt Modal — Phase 13 */}
+      {receiptTargetRequest && (
+        <OrderReceiptModal
+          request={receiptTargetRequest}
+          viewerRole="buyer"
+          onClose={() => setReceiptTargetRequest(null)}
+        />
+      )}
     </div>
   );
 }
@@ -737,9 +752,10 @@ interface OrderDetailsModalProps {
   onPayNow?: (request: CollectionRequest) => void;
   onRaiseDispute?: (request: CollectionRequest) => void;
   onReview?: (request: CollectionRequest) => void;
+  onViewReceipt?: (request: CollectionRequest) => void;
 }
 
-function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispute, onReview }: OrderDetailsModalProps) {
+function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispute, onReview, onViewReceipt }: OrderDetailsModalProps) {
   const badge = getStatusBadge(request.status);
   const StatusIcon = badge.icon;
   const paymentBadge = getPaymentBadge(request.payment, request.status);
@@ -1152,6 +1168,13 @@ function OrderDetailsModal({ request, onClose, onRefresh, onPayNow, onRaiseDispu
                 <span>Raise Dispute</span>
               </button>
             )}
+            <button
+              onClick={() => onViewReceipt?.(request)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-card text-xs font-medium text-foreground hover:bg-secondary transition-colors"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Order Receipt
+            </button>
             <button
               onClick={() => {
                 onRefresh();

@@ -26,6 +26,12 @@ export interface RRUser {
   avatar_url: string | null;
   kyc_verified: boolean;
   created_at: string;
+  // Phase 13: Extended B2B business profile fields
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  company_type?: string | null;
+  company_description?: string | null;
 }
 
 /**
