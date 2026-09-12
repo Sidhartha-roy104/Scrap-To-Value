@@ -78,29 +78,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         })}
 
         {role === 'admin' && (
-          <div className="pt-4 border-t border-sidebar-border/80 mt-3 space-y-1">
-            {!collapsed && (
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-3 block mb-1">
-                Admin Controls
-              </span>
-            )}
-            {adminNavItems.map(item => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'bg-sidebar-accent text-primary border-l-2 border-primary ml-[-2px] font-semibold'
-                      : 'text-sidebar-foreground hover:bg-secondary hover:text-foreground'
-                  }`}
-                >
-                  <item.icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-primary' : ''}`} />
-                  {!collapsed && <span>{item.label}</span>}
-                </Link>
-              );
-            })}
+          <div className="pt-3 border-t border-sidebar-border/80 mt-3">
+            <Link
+              to="/admin"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+            >
+              <Shield className="h-4 w-4 flex-shrink-0" />
+              {!collapsed && <span>Open Admin Console</span>}
+            </Link>
           </div>
         )}
       </nav>

@@ -34,4 +34,35 @@ router.get('/users/:id', adminController.getUserById);
 // PATCH /api/admin/users/:id/status — Soft activate/deactivate user
 router.patch('/users/:id/status', adminController.updateUserStatus);
 
+// Sellers & Verification
+router.get('/sellers', adminController.getSellers);
+router.patch('/sellers/:id/verify', adminController.updateSellerVerification);
+
+// Buyers
+router.get('/buyers', adminController.getBuyers);
+
+// Listings
+router.get('/listings', adminController.getListings);
+router.patch('/listings/:id/status', adminController.updateListingStatus);
+
+// Inventory & Ledger
+router.get('/inventory', adminController.getInventory);
+router.get('/inventory/transactions', adminController.getInventoryTransactions);
+
+// Payments
+router.get('/payments', adminController.getPayments);
+
+// Fulfillment
+router.get('/fulfillment', adminController.getFulfillment);
+
+// Platform Analytics
+router.get('/analytics', adminController.getAnalytics);
+
+// Activity Logs
+router.get('/activity-logs', adminController.getActivityLogs);
+
+// System Settings
+router.get('/settings', adminController.getSettings);
+router.patch('/settings', adminController.updateSettings);
+
 module.exports = router;

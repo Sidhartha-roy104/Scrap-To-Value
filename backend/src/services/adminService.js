@@ -613,6 +613,922 @@ async function updateUserStatus(userId, adminId, { is_active }) {
   return getAdminUserById(userId);
 }
 
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: SELLERS & VERIFICATION
+ * ============================================================================
+ */
+
+async function getAdminSellers({ search, kycStatus, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = ["u.role = 'seller'"];
+
+  if (search && search.trim()) {
+    conditions.push('(u.display_name LIKE ? OR u.email LIKE ? OR u.company_name LIKE ? OR u.phone LIKE ?)');
+    const q = `%${search.trim()}%`;
+    params.push(q, q, q, q);
+  }
+
+  if (kycStatus === 'verified') {
+    conditions.push('u.kyc_verified = 1');
+  } else if (kycStatus === 'unverified') {
+    conditions.push('u.kyc_verified = 0');
+  }
+
+  const where = 'WHERE ' + conditions.join(' AND ');
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM users u ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       u.id,
+       u.email,
+       u.display_name,
+       u.company_name,
+       u.company_address,
+       u.phone,
+       u.avatar_url,
+       u.kyc_verified,
+       u.kyc_notes,
+       u.is_active,
+       u.created_at,
+       u.updated_at,
+       (SELECT COUNT(*) FROM waste_listings l WHERE l.user_id = u.id) as listings_count,
+       (SELECT COUNT(*) FROM collection_requests r WHERE r.seller_id = u.id) as total_requests_count,
+       (SELECT COUNT(*) FROM collection_requests r WHERE r.seller_id = u.id AND r.status = 'delivered') as completed_orders_count,
+       (SELECT COALESCE(SUM(r.amount), 0) FROM collection_requests r WHERE r.seller_id = u.id AND r.status = 'delivered') as total_sales_volume,
+       (SELECT COALESCE(SUM(r.quantity), 0) FROM collection_requests r WHERE r.seller_id = u.id AND r.status = 'delivered') as total_fulfilled_kg
+     FROM users u
+     ${where}
+     ORDER BY u.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    sellers: rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.display_name,
+      company: r.company_name,
+      address: r.company_address,
+      phone: r.phone,
+      avatar_url: r.avatar_url,
+      kyc_verified: Boolean(r.kyc_verified),
+      kyc_notes: r.kyc_notes,
+      is_active: Boolean(r.is_active),
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      listings_count: parseInt(r.listings_count || 0, 10),
+      total_requests_count: parseInt(r.total_requests_count || 0, 10),
+      completed_orders_count: parseInt(r.completed_orders_count || 0, 10),
+      total_sales_volume: parseFloat(r.total_sales_volume || 0),
+      total_fulfilled_kg: parseFloat(r.total_fulfilled_kg || 0),
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+async function updateSellerVerification(sellerId, adminId, { kyc_verified, kyc_notes }) {
+  const [rows] = await pool.execute(
+    `SELECT id, role, display_name FROM users WHERE id = ? AND role = 'seller' LIMIT 1`,
+    [sellerId]
+  );
+
+  if (rows.length === 0) {
+    const err = new Error('Seller not found');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const verifiedVal = kyc_verified ? 1 : 0;
+  const notesVal = kyc_notes !== undefined ? kyc_notes : null;
+
+  await pool.execute(
+    `UPDATE users 
+     SET kyc_verified = ?, 
+         kyc_notes = COALESCE(?, kyc_notes), 
+         updated_at = NOW() 
+     WHERE id = ?`,
+    [verifiedVal, notesVal, sellerId]
+  );
+
+  const [updated] = await pool.execute(
+    `SELECT id, email, display_name, company_name, kyc_verified, kyc_notes, is_active FROM users WHERE id = ?`,
+    [sellerId]
+  );
+
+  return {
+    ...updated[0],
+    kyc_verified: Boolean(updated[0].kyc_verified),
+    is_active: Boolean(updated[0].is_active),
+  };
+}
+
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: BUYERS
+ * ============================================================================
+ */
+
+async function getAdminBuyers({ search, isActive, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = ["u.role = 'buyer'"];
+
+  if (search && search.trim()) {
+    conditions.push('(u.display_name LIKE ? OR u.email LIKE ? OR u.company_name LIKE ? OR u.phone LIKE ?)');
+    const q = `%${search.trim()}%`;
+    params.push(q, q, q, q);
+  }
+
+  if (isActive === 'active') {
+    conditions.push('u.is_active = 1');
+  } else if (isActive === 'inactive') {
+    conditions.push('u.is_active = 0');
+  }
+
+  const where = 'WHERE ' + conditions.join(' AND ');
+
+  const [countRows] = await pool.query(`SELECT COUNT(*) as total FROM users u ${where}`, params);
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       u.id,
+       u.email,
+       u.display_name,
+       u.company_name,
+       u.company_address,
+       u.phone,
+       u.avatar_url,
+       u.is_active,
+       u.created_at,
+       u.updated_at,
+       (SELECT COUNT(*) FROM collection_requests r WHERE r.buyer_id = u.id) as orders_count,
+       (SELECT COUNT(*) FROM collection_requests r WHERE r.buyer_id = u.id AND r.status = 'delivered') as delivered_orders_count,
+       (SELECT COALESCE(SUM(r.amount), 0) FROM collection_requests r WHERE r.buyer_id = u.id AND r.status NOT IN ('cancelled')) as total_ordered_amount,
+       (SELECT COALESCE(SUM(r.quantity), 0) FROM collection_requests r WHERE r.buyer_id = u.id AND r.status = 'delivered') as total_purchased_kg
+     FROM users u
+     ${where}
+     ORDER BY u.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    buyers: rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.display_name,
+      company: r.company_name,
+      address: r.company_address,
+      phone: r.phone,
+      avatar_url: r.avatar_url,
+      is_active: Boolean(r.is_active),
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      orders_count: parseInt(r.orders_count || 0, 10),
+      delivered_orders_count: parseInt(r.delivered_orders_count || 0, 10),
+      total_ordered_amount: parseFloat(r.total_ordered_amount || 0),
+      total_purchased_kg: parseFloat(r.total_purchased_kg || 0),
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: LISTING MANAGEMENT
+ * ============================================================================
+ */
+
+async function getAdminListings({ search, sellerId, category, status, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = [];
+
+  if (search && search.trim()) {
+    conditions.push('(l.title LIKE ? OR l.description LIKE ? OR l.location LIKE ? OR s.display_name LIKE ?)');
+    const q = `%${search.trim()}%`;
+    params.push(q, q, q, q);
+  }
+
+  if (sellerId) {
+    conditions.push('l.user_id = ?');
+    params.push(sellerId);
+  }
+
+  if (category && category !== 'All') {
+    conditions.push('l.waste_type = ?');
+    params.push(category);
+  }
+
+  if (status && status !== 'All') {
+    conditions.push('l.status = ?');
+    params.push(status);
+  }
+
+  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM waste_listings l LEFT JOIN users s ON l.user_id = s.id ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       l.*,
+       s.display_name as seller_name,
+       s.email as seller_email,
+       s.company_name as seller_company,
+       s.kyc_verified as seller_kyc_verified
+     FROM waste_listings l
+     LEFT JOIN users s ON l.user_id = s.id
+     ${where}
+     ORDER BY l.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    listings: rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      waste_type: r.waste_type,
+      description: r.description,
+      quantity: parseFloat(r.quantity || 0),
+      available_quantity: parseFloat(r.available_quantity || 0),
+      reserved_quantity: parseFloat(r.reserved_quantity || 0),
+      fulfilled_quantity: parseFloat(r.fulfilled_quantity || 0),
+      unit: r.unit || 'kg',
+      price_per_kg: parseFloat(r.price_per_kg || 0),
+      total_price: parseFloat(r.total_price || 0),
+      location: r.location,
+      image_url: r.image_url,
+      status: r.status,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      seller: {
+        id: r.user_id,
+        name: r.seller_name,
+        email: r.seller_email,
+        company: r.seller_company,
+        kyc_verified: Boolean(r.seller_kyc_verified),
+      },
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+async function updateListingStatus(listingId, { status }) {
+  const [rows] = await pool.execute(`SELECT id FROM waste_listings WHERE id = ? LIMIT 1`, [listingId]);
+  if (rows.length === 0) {
+    const err = new Error('Listing not found');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  await pool.execute(
+    `UPDATE waste_listings SET status = ?, updated_at = NOW() WHERE id = ?`,
+    [status, listingId]
+  );
+
+  const [updated] = await pool.execute(`SELECT * FROM waste_listings WHERE id = ?`, [listingId]);
+  return updated[0];
+}
+
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: INVENTORY OVERVIEW & TRANSACTIONS
+ * ============================================================================
+ */
+
+async function getAdminInventory({ search, material, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = [];
+
+  if (search && search.trim()) {
+    conditions.push('(l.title LIKE ? OR s.display_name LIKE ?)');
+    const q = `%${search.trim()}%`;
+    params.push(q, q);
+  }
+
+  if (material && material !== 'All') {
+    conditions.push('l.waste_type = ?');
+    params.push(material);
+  }
+
+  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  // Summary aggregates
+  const [summaryRows] = await pool.query(`
+    SELECT 
+      COALESCE(SUM(quantity), 0) as total_quantity,
+      COALESCE(SUM(available_quantity), 0) as total_available,
+      COALESCE(SUM(reserved_quantity), 0) as total_reserved,
+      COALESCE(SUM(fulfilled_quantity), 0) as total_fulfilled,
+      COUNT(*) as total_listings
+    FROM waste_listings
+  `);
+  const summary = summaryRows[0] || {};
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM waste_listings l LEFT JOIN users s ON l.user_id = s.id ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       l.id,
+       l.title,
+       l.waste_type,
+       l.quantity as total_quantity,
+       l.available_quantity,
+       l.reserved_quantity,
+       l.fulfilled_quantity,
+       l.unit,
+       l.price_per_kg,
+       l.status,
+       l.created_at,
+       l.updated_at,
+       s.display_name as seller_name,
+       s.company_name as seller_company
+     FROM waste_listings l
+     LEFT JOIN users s ON l.user_id = s.id
+     ${where}
+     ORDER BY l.available_quantity DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    summary: {
+      total_quantity: parseFloat(summary.total_quantity || 0),
+      total_available: parseFloat(summary.total_available || 0),
+      total_reserved: parseFloat(summary.total_reserved || 0),
+      total_fulfilled: parseFloat(summary.total_fulfilled || 0),
+      total_listings: parseInt(summary.total_listings || 0, 10),
+    },
+    inventory: rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      waste_type: r.waste_type,
+      total_quantity: parseFloat(r.total_quantity || 0),
+      available_quantity: parseFloat(r.available_quantity || 0),
+      reserved_quantity: parseFloat(r.reserved_quantity || 0),
+      fulfilled_quantity: parseFloat(r.fulfilled_quantity || 0),
+      unit: r.unit || 'kg',
+      price_per_kg: parseFloat(r.price_per_kg || 0),
+      status: r.status,
+      created_at: r.created_at,
+      seller_name: r.seller_name,
+      seller_company: r.seller_company,
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+async function getInventoryTransactions({ listingId, type, page = 1, limit = 25 } = {}) {
+  const params = [];
+  const conditions = [];
+
+  if (listingId) {
+    conditions.push('it.listing_id = ?');
+    params.push(listingId);
+  }
+
+  if (type && type !== 'All') {
+    conditions.push('it.transaction_type = ?');
+    params.push(type);
+  }
+
+  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM inventory_transactions it ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 25));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       it.*,
+       wl.title as listing_title,
+       wl.waste_type,
+       u.display_name as actor_name
+     FROM inventory_transactions it
+     JOIN waste_listings wl ON it.listing_id = wl.id
+     LEFT JOIN users u ON it.actor_id = u.id
+     ${where}
+     ORDER BY it.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    transactions: rows.map((r) => ({
+      id: r.id,
+      listing_id: r.listing_id,
+      listing_title: r.listing_title,
+      waste_type: r.waste_type,
+      order_id: r.order_id,
+      transaction_type: r.transaction_type,
+      quantity: parseFloat(r.quantity || 0),
+      previous_available_quantity: parseFloat(r.previous_available_quantity || 0),
+      resulting_available_quantity: parseFloat(r.resulting_available_quantity || 0),
+      actor_name: r.actor_name,
+      source: r.source,
+      note: r.note,
+      created_at: r.created_at,
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: PAYMENT MONITORING
+ * ============================================================================
+ */
+
+async function getAdminPayments({ search, status, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = [];
+
+  if (search && search.trim()) {
+    conditions.push('(p.id LIKE ? OR p.request_id LIKE ? OR b.display_name LIKE ? OR b.email LIKE ?)');
+    const q = `%${search.trim()}%`;
+    params.push(q, q, q, q);
+  }
+
+  if (status && status !== 'All') {
+    conditions.push('p.status = ?');
+    params.push(status);
+  }
+
+  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  // Payment totals summary
+  const [summaryRows] = await pool.query(`
+    SELECT 
+      COUNT(*) as total_payments,
+      SUM(CASE WHEN status = 'SUCCEEDED' THEN 1 ELSE 0 END) as succeeded_count,
+      SUM(CASE WHEN status = 'SUCCEEDED' THEN amount ELSE 0 END) as succeeded_amount,
+      SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed_count,
+      COALESCE(SUM(amount), 0) as total_volume
+    FROM payments
+  `);
+  const summary = summaryRows[0] || {};
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total 
+     FROM payments p 
+     LEFT JOIN collection_requests r ON p.request_id = r.id 
+     LEFT JOIN users b ON p.buyer_id = b.id 
+     ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       p.id,
+       p.request_id,
+       p.buyer_id,
+       p.amount,
+       p.currency,
+       p.status,
+       p.payment_method,
+       p.paid_at,
+       p.created_at,
+       p.updated_at,
+       b.display_name as buyer_name,
+       b.email as buyer_email,
+       r.waste_type,
+       r.quantity as order_quantity,
+       r.seller_id,
+       s.display_name as seller_name
+     FROM payments p
+     LEFT JOIN collection_requests r ON p.request_id = r.id
+     LEFT JOIN users b ON p.buyer_id = b.id
+     LEFT JOIN users s ON r.seller_id = s.id
+     ${where}
+     ORDER BY p.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    summary: {
+      total_payments: parseInt(summary.total_payments || 0, 10),
+      succeeded_count: parseInt(summary.succeeded_count || 0, 10),
+      succeeded_amount: parseFloat(summary.succeeded_amount || 0),
+      pending_count: parseInt(summary.pending_count || 0, 10),
+      failed_count: parseInt(summary.failed_count || 0, 10),
+      total_volume: parseFloat(summary.total_volume || 0),
+    },
+    payments: rows.map((r) => ({
+      id: r.id,
+      request_id: r.request_id,
+      amount: parseFloat(r.amount || 0),
+      currency: r.currency || 'INR',
+      status: r.status,
+      payment_method: r.payment_method || 'MOCK_GATEWAY',
+      paid_at: r.paid_at,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      buyer: {
+        id: r.buyer_id,
+        name: r.buyer_name,
+        email: r.buyer_email,
+      },
+      seller: {
+        id: r.seller_id,
+        name: r.seller_name,
+      },
+      order: {
+        waste_type: r.waste_type,
+        quantity: parseFloat(r.order_quantity || 0),
+      },
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+/**
+ * ============================================================================
+ * PLATFORM OPERATIONS: FULFILLMENT MONITORING
+ * ============================================================================
+ */
+
+async function getAdminFulfillment({ stage, delayedOnly, page = 1, limit = 20 } = {}) {
+  const params = [];
+  const conditions = [];
+
+  if (stage && stage !== 'All') {
+    conditions.push('r.status = ?');
+    params.push(stage);
+  }
+
+  if (delayedOnly === 'true' || delayedOnly === true) {
+    // Orders stuck in transit/confirmed/ready_for_pickup for > 48h
+    conditions.push(
+      "r.status IN ('confirmed', 'ready_for_pickup', 'in_transit') AND r.updated_at < DATE_SUB(NOW(), INTERVAL 48 HOUR)"
+    );
+  }
+
+  const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  // Pipeline stage counters
+  const [pipelineStats] = await pool.query(`
+    SELECT
+      SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
+      SUM(CASE WHEN status = 'awaiting_payment' THEN 1 ELSE 0 END) as awaiting_payment_count,
+      SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
+      SUM(CASE WHEN status = 'ready_for_pickup' THEN 1 ELSE 0 END) as ready_for_pickup_count,
+      SUM(CASE WHEN status = 'in_transit' THEN 1 ELSE 0 END) as in_transit_count,
+      SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered_count,
+      SUM(CASE WHEN status = 'disputed' THEN 1 ELSE 0 END) as disputed_count,
+      SUM(CASE WHEN status IN ('confirmed', 'ready_for_pickup', 'in_transit') AND updated_at < DATE_SUB(NOW(), INTERVAL 48 HOUR) THEN 1 ELSE 0 END) as delayed_count
+    FROM collection_requests
+  `);
+  const pipeline = pipelineStats[0] || {};
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM collection_requests r ${where}`,
+    params
+  );
+  const total = countRows[0]?.total || 0;
+
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       r.*,
+       TIMESTAMPDIFF(HOUR, r.updated_at, NOW()) as hours_in_current_status,
+       b.display_name as buyer_name,
+       b.company_name as buyer_company,
+       s.display_name as seller_name,
+       s.company_name as seller_company,
+       l.title as listing_title
+     FROM collection_requests r
+     LEFT JOIN users b ON r.buyer_id = b.id
+     LEFT JOIN users s ON r.seller_id = s.id
+     LEFT JOIN waste_listings l ON r.listing_id = l.id
+     ${where}
+     ORDER BY r.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, numLimit, offset]
+  );
+
+  return {
+    pipeline: {
+      pending: parseInt(pipeline.pending_count || 0, 10),
+      awaiting_payment: parseInt(pipeline.awaiting_payment_count || 0, 10),
+      confirmed: parseInt(pipeline.confirmed_count || 0, 10),
+      ready_for_pickup: parseInt(pipeline.ready_for_pickup_count || 0, 10),
+      in_transit: parseInt(pipeline.in_transit_count || 0, 10),
+      delivered: parseInt(pipeline.delivered_count || 0, 10),
+      disputed: parseInt(pipeline.disputed_count || 0, 10),
+      delayed: parseInt(pipeline.delayed_count || 0, 10),
+    },
+    orders: rows.map((r) => {
+      const hours = parseInt(r.hours_in_current_status || 0, 10);
+      const isDelayed = ['confirmed', 'ready_for_pickup', 'in_transit'].includes(r.status) && hours >= 48;
+
+      return {
+        id: r.id,
+        listing_id: r.listing_id,
+        listing_title: r.listing_title,
+        waste_type: r.waste_type,
+        quantity: parseFloat(r.quantity || 0),
+        amount: parseFloat(r.amount || 0),
+        status: r.status,
+        ready_at: r.ready_at,
+        dispatched_at: r.dispatched_at,
+        delivered_at: r.delivered_at,
+        fulfillment_notes: r.fulfillment_notes,
+        hours_in_status: hours,
+        is_delayed: isDelayed,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        buyer: {
+          id: r.buyer_id,
+          name: r.buyer_name,
+          company: r.buyer_company,
+        },
+        seller: {
+          id: r.seller_id,
+          name: r.seller_name,
+          company: r.seller_company,
+        },
+      };
+    }),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+/**
+ * ============================================================================
+ * INSIGHTS & SYSTEM: PLATFORM ANALYTICS
+ * ============================================================================
+ */
+
+async function getAdminAnalytics() {
+  // 1. Daily order trend over last 14 days
+  const [dailyRows] = await pool.query(`
+    SELECT 
+      DATE(created_at) as date_val,
+      COUNT(*) as orders_count,
+      SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered_count,
+      SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+      COALESCE(SUM(amount), 0) as total_volume
+    FROM collection_requests
+    WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 14 DAY)
+    GROUP BY DATE(created_at)
+    ORDER BY date_val ASC
+  `);
+
+  // 2. Material / waste type distribution
+  const [categoryRows] = await pool.query(`
+    SELECT 
+      waste_type,
+      COUNT(*) as total_orders,
+      COALESCE(SUM(quantity), 0) as total_quantity_kg,
+      COALESCE(SUM(amount), 0) as total_amount
+    FROM collection_requests
+    GROUP BY waste_type
+    ORDER BY total_quantity_kg DESC
+  `);
+
+  // 3. Dispute distribution by status and reason
+  const [disputeRows] = await pool.query(`
+    SELECT 
+      status,
+      COUNT(*) as count
+    FROM order_disputes
+    GROUP BY status
+  `);
+
+  // 4. User distribution
+  const [userRoleRows] = await pool.query(`
+    SELECT 
+      role,
+      COUNT(*) as count,
+      SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_count
+    FROM users
+    GROUP BY role
+  `);
+
+  return {
+    daily_trends: dailyRows.map((r) => ({
+      date: r.date_val,
+      orders: parseInt(r.orders_count || 0, 10),
+      delivered: parseInt(r.delivered_count || 0, 10),
+      cancelled: parseInt(r.cancelled_count || 0, 10),
+      volume: parseFloat(r.total_volume || 0),
+    })),
+    category_distribution: categoryRows.map((r) => ({
+      waste_type: r.waste_type,
+      orders: parseInt(r.total_orders || 0, 10),
+      quantity_kg: parseFloat(r.total_quantity_kg || 0),
+      amount: parseFloat(r.total_amount || 0),
+    })),
+    dispute_distribution: disputeRows.map((r) => ({
+      status: r.status,
+      count: parseInt(r.count || 0, 10),
+    })),
+    user_distribution: userRoleRows.map((r) => ({
+      role: r.role,
+      count: parseInt(r.count || 0, 10),
+      active: parseInt(r.active_count || 0, 10),
+    })),
+  };
+}
+
+/**
+ * ============================================================================
+ * INSIGHTS & SYSTEM: GLOBAL ACTIVITY LOGS
+ * ============================================================================
+ */
+
+async function getAdminActivityLogs({ page = 1, limit = 30 } = {}) {
+  const numLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 30));
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
+
+  // Union of fulfillment activity, dispute activity, and payment transitions
+  const unionQuery = `
+    SELECT 
+      CONCAT('ful_', id) as log_id,
+      'FULFILLMENT' as category,
+      request_id as reference_id,
+      changed_by as actor_id,
+      actor_role,
+      CONCAT('Status moved from ', COALESCE(previous_status, 'none'), ' to ', new_status) as action,
+      notes,
+      created_at
+    FROM order_fulfillment_activity
+
+    UNION ALL
+
+    SELECT 
+      CONCAT('dsp_', id) as log_id,
+      'DISPUTE' as category,
+      dispute_id as reference_id,
+      actor_id,
+      actor_role,
+      action,
+      notes,
+      created_at
+    FROM dispute_activity
+
+    UNION ALL
+
+    SELECT 
+      CONCAT('pay_', id) as log_id,
+      'PAYMENT' as category,
+      payment_id as reference_id,
+      actor_id,
+      'buyer' as actor_role,
+      CONCAT('Payment event: ', event_type, ' (', COALESCE(previous_status, 'none'), ' -> ', resulting_status, ')') as action,
+      note as notes,
+      created_at
+    FROM payment_transactions
+  `;
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) as total FROM (${unionQuery}) as all_logs`
+  );
+  const total = countRows[0]?.total || 0;
+
+  const [rows] = await pool.query(
+    `SELECT 
+       l.*,
+       u.display_name as actor_name,
+       u.email as actor_email
+     FROM (${unionQuery}) as l
+     LEFT JOIN users u ON l.actor_id = u.id
+     ORDER BY l.created_at DESC
+     LIMIT ? OFFSET ?`,
+    [numLimit, offset]
+  );
+
+  return {
+    logs: rows.map((r) => ({
+      id: r.log_id,
+      category: r.category,
+      reference_id: r.reference_id,
+      actor_id: r.actor_id,
+      actor_name: r.actor_name || 'System / Automated',
+      actor_email: r.actor_email,
+      actor_role: r.actor_role,
+      action: r.action,
+      notes: r.notes,
+      created_at: r.created_at,
+    })),
+    total,
+    page: numPage,
+    limit: numLimit,
+    totalPages: Math.ceil(total / numLimit),
+  };
+}
+
+/**
+ * ============================================================================
+ * INSIGHTS & SYSTEM: SYSTEM SETTINGS
+ * ============================================================================
+ */
+
+async function getSystemSettings() {
+  const [rows] = await pool.query(`SELECT key_name, value_text, description, updated_at FROM system_settings ORDER BY key_name ASC`);
+  const settings = {};
+  for (const r of rows) {
+    settings[r.key_name] = {
+      value: r.value_text,
+      description: r.description,
+      updated_at: r.updated_at,
+    };
+  }
+  return settings;
+}
+
+async function updateSystemSettings(updates) {
+  // Safe whitelist of configurable keys
+  const allowedKeys = [
+    'platform_name',
+    'support_email',
+    'default_order_timeout_hours',
+    'dispute_escalation_days',
+    'min_order_quantity_kg',
+    'maintenance_mode',
+  ];
+
+  for (const [key, value] of Object.entries(updates)) {
+    if (allowedKeys.includes(key)) {
+      await pool.execute(
+        `UPDATE system_settings SET value_text = ?, updated_at = NOW() WHERE key_name = ?`,
+        [String(value).trim(), key]
+      );
+    }
+  }
+
+  return getSystemSettings();
+}
+
 module.exports = {
   getAdminStats,
   getAdminOrders,
@@ -620,4 +1536,18 @@ module.exports = {
   getAdminUsers,
   getAdminUserById,
   updateUserStatus,
+  // New platform operations & system services
+  getAdminSellers,
+  updateSellerVerification,
+  getAdminBuyers,
+  getAdminListings,
+  updateListingStatus,
+  getAdminInventory,
+  getInventoryTransactions,
+  getAdminPayments,
+  getAdminFulfillment,
+  getAdminAnalytics,
+  getAdminActivityLogs,
+  getSystemSettings,
+  updateSystemSettings,
 };
