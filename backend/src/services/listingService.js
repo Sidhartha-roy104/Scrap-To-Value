@@ -52,6 +52,8 @@ function formatListing(row, customBaseUrl) {
     price_per_kg: parseFloat(row.price_per_kg),
     total_price: parseFloat(row.total_price),
     location: row.location,
+    latitude: row.latitude !== null && row.latitude !== undefined ? parseFloat(row.latitude) : null,
+    longitude: row.longitude !== null && row.longitude !== undefined ? parseFloat(row.longitude) : null,
     image_url: resolveImageUrl(row.image_url, customBaseUrl),
     status: row.status,
     created_at: row.created_at,
@@ -85,6 +87,8 @@ async function createListing({
   unit = 'kg',
   price_per_kg,
   location,
+  latitude = null,
+  longitude = null,
   image_url = null,
   status = 'Available',
 }) {
@@ -92,14 +96,16 @@ async function createListing({
   const numQty = parseFloat(quantity);
   const numPrice = parseFloat(price_per_kg);
   const total_price = parseFloat((numQty * numPrice).toFixed(2));
+  const parsedLat = (latitude !== undefined && latitude !== null && latitude !== '') ? parseFloat(latitude) : null;
+  const parsedLng = (longitude !== undefined && longitude !== null && longitude !== '') ? parseFloat(longitude) : null;
 
   const query = `
     INSERT INTO waste_listings (
       id, user_id, waste_type, title, description,
       quantity, available_quantity, reserved_quantity, fulfilled_quantity,
       unit, price_per_kg, total_price,
-      location, image_url, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      location, latitude, longitude, image_url, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
   await pool.execute(query, [
@@ -116,6 +122,8 @@ async function createListing({
     numPrice,
     total_price,
     location,
+    parsedLat,
+    parsedLng,
     image_url,
     status,
   ]);
@@ -307,6 +315,8 @@ async function updateListing(id, userId, updates) {
     'unit',
     'price_per_kg',
     'location',
+    'latitude',
+    'longitude',
     'image_url',
     'status',
   ];
@@ -320,7 +330,11 @@ async function updateListing(id, userId, updates) {
   for (const field of allowedFields) {
     if (updates[field] !== undefined) {
       setClauses.push(`${field} = ?`);
-      params.push(updates[field]);
+      if ((field === 'latitude' || field === 'longitude') && updates[field] !== null && updates[field] !== '') {
+        params.push(parseFloat(updates[field]));
+      } else {
+        params.push(updates[field]);
+      }
     }
   }
 

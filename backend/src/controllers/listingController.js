@@ -52,6 +52,8 @@ async function createListing(req, res, next) {
       unit,
       price_per_kg,
       location,
+      latitude,
+      longitude,
       status,
     } = req.body;
 
@@ -64,6 +66,8 @@ async function createListing(req, res, next) {
       unit: unit || 'kg',
       price_per_kg,
       location,
+      latitude: latitude !== undefined ? latitude : null,
+      longitude: longitude !== undefined ? longitude : null,
       image_url,
       status: status || 'Available',
     });

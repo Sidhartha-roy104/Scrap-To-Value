@@ -27,6 +27,7 @@ import { WasteType, formatCurrency, formatRelativeTime } from '@/data/mockData';
 import { useToastNotification } from '@/components/ToastNotification';
 import type { DbWasteListing } from '@/hooks/useWasteListings';
 import { SellerRatingBadge } from '@/components/SellerRatingBadge';
+import { LocationMapView } from '@/components/maps/LocationMapView';
 
 interface ListingDetailModalProps {
   listing: DbWasteListing | null;
@@ -258,6 +259,14 @@ export function ListingDetailModal({ listing, isOpen, onClose, onEdit }: Listing
             </div>
           </div>
         )}
+
+        {/* Pickup Location Map / Summary */}
+        <LocationMapView
+          latitude={listing.latitude}
+          longitude={listing.longitude}
+          locationName={listing.location}
+          height="220px"
+        />
 
         {/* Description */}
         {listing.description && (

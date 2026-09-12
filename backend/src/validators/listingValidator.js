@@ -57,6 +57,40 @@ const createListingRules = [
   body('status')
     .optional()
     .isIn(VALID_STATUSES).withMessage(`Status must be one of: ${VALID_STATUSES.join(', ')}`),
+
+  body('latitude')
+    .optional({ nullable: true })
+    .custom((val, { req }) => {
+      if (val === null || val === undefined || val === '') return true;
+      const num = Number(val);
+      if (typeof val === 'boolean' || isNaN(num) || typeof val === 'object') {
+        throw new Error('Latitude must be a valid number between -90 and 90');
+      }
+      if (num < -90 || num > 90) {
+        throw new Error('Latitude must be between -90 and 90');
+      }
+      if (req.body.longitude === null || req.body.longitude === undefined || req.body.longitude === '') {
+        throw new Error('Longitude is required when latitude is provided');
+      }
+      return true;
+    }),
+
+  body('longitude')
+    .optional({ nullable: true })
+    .custom((val, { req }) => {
+      if (val === null || val === undefined || val === '') return true;
+      const num = Number(val);
+      if (typeof val === 'boolean' || isNaN(num) || typeof val === 'object') {
+        throw new Error('Longitude must be a valid number between -180 and 180');
+      }
+      if (num < -180 || num > 180) {
+        throw new Error('Longitude must be between -180 and 180');
+      }
+      if (req.body.latitude === null || req.body.latitude === undefined || req.body.latitude === '') {
+        throw new Error('Latitude is required when longitude is provided');
+      }
+      return true;
+    }),
 ];
 
 const updateListingRules = [
@@ -103,6 +137,40 @@ const updateListingRules = [
   body('status')
     .optional()
     .isIn(VALID_STATUSES).withMessage(`Status must be one of: ${VALID_STATUSES.join(', ')}`),
+
+  body('latitude')
+    .optional({ nullable: true })
+    .custom((val, { req }) => {
+      if (val === null || val === undefined || val === '') return true;
+      const num = Number(val);
+      if (typeof val === 'boolean' || isNaN(num) || typeof val === 'object') {
+        throw new Error('Latitude must be a valid number between -90 and 90');
+      }
+      if (num < -90 || num > 90) {
+        throw new Error('Latitude must be between -90 and 90');
+      }
+      if (req.body.longitude === null || req.body.longitude === undefined || req.body.longitude === '') {
+        throw new Error('Longitude is required when latitude is provided');
+      }
+      return true;
+    }),
+
+  body('longitude')
+    .optional({ nullable: true })
+    .custom((val, { req }) => {
+      if (val === null || val === undefined || val === '') return true;
+      const num = Number(val);
+      if (typeof val === 'boolean' || isNaN(num) || typeof val === 'object') {
+        throw new Error('Longitude must be a valid number between -180 and 180');
+      }
+      if (num < -180 || num > 180) {
+        throw new Error('Longitude must be between -180 and 180');
+      }
+      if (req.body.latitude === null || req.body.latitude === undefined || req.body.latitude === '') {
+        throw new Error('Latitude is required when longitude is provided');
+      }
+      return true;
+    }),
 ];
 
 module.exports = {

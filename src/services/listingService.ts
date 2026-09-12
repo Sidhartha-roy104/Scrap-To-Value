@@ -26,6 +26,8 @@ export interface DbWasteListing {
   price_per_kg: number;
   total_price: number;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   image_url: string | null;
   status: 'Available' | 'Sold' | 'Pending';
   created_at: string;
@@ -47,6 +49,8 @@ export interface CreateListingPayload {
   price_per_kg: number;
   total_price?: number;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   image_url?: string | null;
   status?: 'Available' | 'Sold' | 'Pending';
 }

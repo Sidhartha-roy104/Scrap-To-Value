@@ -28,6 +28,8 @@ export interface CreateListingInput {
   price_per_kg: number;
   total_price?: number;
   location: string;
+  latitude?: number | null;
+  longitude?: number | null;
   description: string;
   image?: File;
 }
@@ -74,6 +76,12 @@ export function useWasteListings() {
         formData.append('unit', input.unit || 'kg');
         formData.append('price_per_kg', String(input.price_per_kg));
         formData.append('location', input.location.trim());
+        if (input.latitude !== undefined && input.latitude !== null) {
+          formData.append('latitude', String(input.latitude));
+        }
+        if (input.longitude !== undefined && input.longitude !== null) {
+          formData.append('longitude', String(input.longitude));
+        }
         if (input.description?.trim()) {
           formData.append('description', input.description.trim());
         }
@@ -89,6 +97,8 @@ export function useWasteListings() {
           unit: input.unit || 'kg',
           price_per_kg: Number(input.price_per_kg),
           location: input.location.trim(),
+          latitude: input.latitude !== undefined ? input.latitude : null,
+          longitude: input.longitude !== undefined ? input.longitude : null,
           description: input.description?.trim() || null,
           image_url: null,
           status: 'Available',

@@ -7,6 +7,7 @@ import { useWasteListings, DbWasteListing } from '@/hooks/useWasteListings';
 import { uploadListingImage, resolveImageUrl } from '@/services/listingService';
 import { useToastNotification } from '@/components/ToastNotification';
 import { WasteType } from '@/data/mockData';
+import { LocationMapPicker, type LocationCoordinates } from '@/components/maps/LocationMapPicker';
 
 const wasteTypes: WasteType[] = ['Organic', 'Plastic', 'Metal', 'Paper', 'E-waste', 'Textile'];
 const locations = ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Vellore', 'Erode', 'Tirupur'];
@@ -31,6 +32,7 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
   const [isSaving, setIsSaving] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<EditFormData>();
@@ -46,6 +48,11 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
       });
       setImagePreview(resolveImageUrl(listing.image_url) || null);
       setImageFile(null);
+      if (typeof listing.latitude === 'number' && typeof listing.longitude === 'number') {
+        setCoordinates({ latitude: listing.latitude, longitude: listing.longitude });
+      } else {
+        setCoordinates(null);
+      }
     }
   }, [listing, isOpen, reset]);
 
@@ -78,6 +85,8 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
         price_per_kg: data.pricePerKg,
         total_price: data.quantity * data.pricePerKg,
         location: data.location,
+        latitude: coordinates?.latitude ?? null,
+        longitude: coordinates?.longitude ?? null,
         description: data.description,
       };
 
@@ -141,6 +150,20 @@ export function EditListingModal({ listing, isOpen, onClose }: EditListingModalP
             </select>
             {errors.location && <p className="text-xs text-destructive mt-1">{errors.location.message}</p>}
           </div>
+        </div>
+
+        {/* Interactive Pickup Location Map */}
+        <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            Pickup Location Pin <span className="text-xs text-muted-foreground font-normal">(Interactive Map — Optional)</span>
+          </label>
+          <LocationMapPicker
+            latitude={coordinates?.latitude}
+            longitude={coordinates?.longitude}
+            onLocationChange={setCoordinates}
+            disabled={isSaving}
+            height="260px"
+          />
         </div>
 
         {/* Image Upload */}

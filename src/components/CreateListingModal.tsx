@@ -6,6 +6,7 @@ import { Spinner } from '@/components/Spinner';
 import { useWasteListings } from '@/hooks/useWasteListings';
 import { useToastNotification } from '@/components/ToastNotification';
 import { WasteType } from '@/data/mockData';
+import { LocationMapPicker, type LocationCoordinates } from '@/components/maps/LocationMapPicker';
 
 const wasteTypes: WasteType[] = ['Organic', 'Plastic', 'Metal', 'Paper', 'E-waste', 'Textile'];
 const locations = ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Vellore', 'Erode', 'Tirupur'];
@@ -29,6 +30,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
   const { addToast } = useToastNotification();
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,6 +74,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
     setErrorMessage(null);
     reset();
     clearImage();
+    setCoordinates(null);
     onClose();
   };
 
@@ -85,6 +88,8 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
         unit: 'kg',
         price_per_kg: Number(data.pricePerKg),
         location: data.location,
+        latitude: coordinates?.latitude ?? null,
+        longitude: coordinates?.longitude ?? null,
         description: data.description?.trim() || '',
         image: imageFile || undefined,
       });
@@ -97,6 +102,7 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
 
       reset();
       clearImage();
+      setCoordinates(null);
       onClose();
       if (onSuccess) onSuccess();
     } catch (err: unknown) {
@@ -194,6 +200,20 @@ export function CreateListingModal({ isOpen, onClose, onSuccess }: CreateListing
             </select>
             {errors.location && <p className="text-xs text-destructive mt-1">{errors.location.message}</p>}
           </div>
+        </div>
+
+        {/* Interactive Pickup Location Map */}
+        <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/60 space-y-2">
+          <label className="block text-sm font-medium text-foreground">
+            Interactive Pickup Location Map <span className="text-xs text-muted-foreground font-normal">(Optional Pin)</span>
+          </label>
+          <LocationMapPicker
+            latitude={coordinates?.latitude}
+            longitude={coordinates?.longitude}
+            onLocationChange={setCoordinates}
+            disabled={isAdding}
+            height="260px"
+          />
         </div>
 
         {/* Live Estimated Price Summary */}
